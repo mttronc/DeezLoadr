@@ -238,6 +238,10 @@ function downloadMultiple(type, id) {
     request(format(url + '%d?limit=-1', id)).then((data) => {
         const jsonData = JSON.parse(data);
         Promise.map(jsonData.tracks.data, (track) => {
+            if ('album' === type) {
+                return downloadSingleTrack(track.id, jsonData.artist.name);
+            }
+
             return downloadSingleTrack(track.id);
         }, {
             concurrency: 1
@@ -252,7 +256,7 @@ function downloadMultiple(type, id) {
  *
  * @param {Number} id
  */
-function downloadSingleTrack(id) {
+function downloadSingleTrack(id, albumArtistName) {
     let fileName;
     
     return request(format('http://www.deezer.com/track/%d', id)).then((htmlString) => {
@@ -278,11 +282,17 @@ function downloadSingleTrack(id) {
             const url = getTrackUrl(trackInfos, trackQuality.id);
             
             let artistName = multipleWhitespacesToSingle(sanitize(trackInfos.ART_NAME));
+
+            // Override with album artist name if downloading an album
+            // Because an album may contain tracks from multiple artists
+            if ('undefined' !== typeof albumArtistName) {
+                artistName = albumArtistName;
+            }
             
             if ('' === artistName.trim()) {
                 artistName = 'Unknown artist';
             }
-            
+
             let albumName = multipleWhitespacesToSingle(sanitize(trackInfos.ALB_TITLE));
             
             if ('' === albumName.trim()) {
