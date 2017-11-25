@@ -386,6 +386,19 @@ function generateRandomHexString(stringLength) {
 }
 
 /**
+* Parse file size and check if it is defined & is non zero zero
+*
+* @returns {Boolean}
+*/
+function fileSizeIsDefined(filesize) {
+    if ('undefined' === typeof filesize || 0 === parseInt(fileSize)) {
+        return false;
+    }
+
+    return true;
+}
+
+/**
  * Get a downloadable track quality.
  *
  * @param {Array} trackInfos
@@ -394,10 +407,10 @@ function generateRandomHexString(stringLength) {
  */
 function getValidTrackQuality(trackInfos) {
     if (musicQualities.FLAC === selectedMusicQuality) {
-        if ('undefined' === typeof trackInfos.FILESIZE_FLAC || 0 === trackInfos.FILESIZE_FLAC) {
-            if ('undefined' === typeof trackInfos.FILESIZE_MP3_320 || 0 === trackInfos.FILESIZE_MP3_320) {
-                if ('undefined' === typeof trackInfos.FILESIZE_MP3_256 || 0 === trackInfos.FILESIZE_MP3_256) {
-                    if ('undefined' === typeof trackInfos.FILESIZE_MP3_128 || 0 === trackInfos.FILESIZE_MP3_128) {
+        if (fileSizeIsDefined(trackInfos.FILESIZE_FLAC)) {
+            if (fileSizeIsDefined(trackInfos.FILESIZE_MP3_320)) {
+                if (fileSizeIsDefined(trackInfos.FILESIZE_MP3_256)) {
+                    if (fileSizeIsDefined(trackInfos.FILESIZE_MP3_128)) {
                         return false;
                     }
                     
@@ -414,10 +427,10 @@ function getValidTrackQuality(trackInfos) {
     }
     
     if (musicQualities.MP3_320 === selectedMusicQuality) {
-        if ('undefined' === typeof trackInfos.FILESIZE_MP3_320 || 0 === trackInfos.FILESIZE_MP3_320) {
-            if ('undefined' === typeof trackInfos.FILESIZE_MP3_256 || 0 === trackInfos.FILESIZE_MP3_256) {
-                if ('undefined' === typeof trackInfos.FILESIZE_MP3_128 || 0 === trackInfos.FILESIZE_MP3_128) {
-                    if ('undefined' === typeof trackInfos.FILESIZE_FLAC || 0 === trackInfos.FILESIZE_FLAC) {
+        if (fileSizeIsDefined(trackInfos.FILESIZE_MP3_320)) {
+            if (fileSizeIsDefined(trackInfos.FILESIZE_MP3_256)) {
+                if (fileSizeIsDefined(trackInfos.FILESIZE_MP3_128)) {
+                    if (fileSizeIsDefined(trackInfos.FILESIZE_FLAC)) {
                         return false;
                     }
                     
@@ -434,10 +447,10 @@ function getValidTrackQuality(trackInfos) {
     }
     
     if (musicQualities.MP3_128 === selectedMusicQuality) {
-        if ('undefined' === typeof trackInfos.FILESIZE_MP3_128 || 0 === trackInfos.FILESIZE_MP3_128) {
-            if ('undefined' === typeof trackInfos.FILESIZE_MP3_256 || 0 === trackInfos.FILESIZE_MP3_256) {
-                if ('undefined' === typeof trackInfos.FILESIZE_MP3_320 || 0 === trackInfos.FILESIZE_MP3_320) {
-                    if ('undefined' === typeof trackInfos.FILESIZE_FLAC || 0 === trackInfos.FILESIZE_FLAC) {
+        if (fileSizeIsDefined(trackInfos.FILESIZE_MP3_128)) {
+            if (fileSizeIsDefined(trackInfos.FILESIZE_MP3_256)) {
+                if (fileSizeIsDefined(trackInfos.FILESIZE_MP3_320)) {
+                    if (fileSizeIsDefined(trackInfos.FILESIZE_FLAC)) {
                         return false;
                     }
                     
