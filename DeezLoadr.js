@@ -6,6 +6,7 @@
  */
 
 const chalk = require('chalk');
+const commandLineArgs = require('command-line-args')
 const ora = require('ora');
 const sanitize = require('sanitize-filename');
 const Promise = require('bluebird');
@@ -19,7 +20,7 @@ const fs = require('fs-extra');
 const http = require('http');
 const https = require('https');
 
-const DOWNLOAD_DIR = 'DOWNLOADS/';
+let DOWNLOAD_DIR = 'DOWNLOADS/';
 
 const musicQualities = {
     MP3_128: {
@@ -53,6 +54,27 @@ const downloadSpinner = new ora({
     },
     color:   'white'
 });
+
+const optionDefinitions = [
+    {
+        name: "url",
+        alias: 'u',
+        type: String
+    },
+    {
+        name: "quality",
+        alias: 'q',
+        type: String
+    },
+    {
+        name: "path",
+        alias: 'p',
+        type: String
+    }
+];
+
+const options = commandLineArgs(optionDefinitions);
+let isCli = Object.keys(options).length > 0;
 
 
 /**
@@ -98,7 +120,42 @@ const downloadSpinner = new ora({
     console.log(chalk.cyan('║') + '  BTC:  18JFjbdSDNQF69LNCJh8mhfoqRBTJuobCi  ' + chalk.cyan('║'));
     console.log(chalk.cyan('╚════════════════════════════════════════════╝\n'));
     
-    selectMusicQuality();
+    if (isCli) {
+        let quality = options['quality'];
+        let url = options['url'];
+        let path = options['path'];
+
+        switch (quality) {
+            case 'MP3_128':
+                selectedMusicQuality = musicQualities.MP3_128;
+                break;
+            case 'MP3_320':
+                selectedMusicQuality = musicQualities.MP3_320;
+                break;
+            case 'FLAC':
+                selectedMusicQuality = musicQualities.FLAC;
+                break;
+        }
+
+        DOWNLOAD_DIR = path;
+
+        let deezerUrlType = getDeezerUrlTye(url);
+        let deezerUrlId = getDeezerUrlId(url);
+
+        switch (deezerUrlType) {
+            case 'album':
+                downloadMultiple('album', deezerUrlId);
+                break;
+            case 'playlist':
+                downloadMultiple('playlist', deezerUrlId);
+                break;
+            case 'track':
+                downloadSingleTrack(deezerUrlId);
+                break;
+        }
+    } else {
+        selectMusicQuality();
+    }
 })();
 
 /**
@@ -243,6 +300,10 @@ function downloadMultiple(type, id) {
             concurrency: 1
         }).then(function () {
             downloadTaskRunning = false;
+
+            if (isCli) {
+                process.exit(0);
+            }
         });
     });
 }
@@ -591,12 +652,22 @@ function addId3Tags(trackInfos, filename) {
                     downloadSpinner.succeed('Downloaded "' + trackInfos.ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
                 }
                 
-                askForNewDownload();
+                if (isCli) {
+                    if (!downloadTaskRunning) {
+                        process.exit(0);
+                    }
+                } else {
+                    askForNewDownload();
+                }
             }, 50);
         });
     } catch (ex) {
         downloadSpinner.warn('Failed writing ID3 tags to "' + trackInfos.ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
         
-        askForNewDownload();
+        if (isCli) {
+            process.exit(1);
+        } else {
+            askForNewDownload();
+        }
     }
 }
