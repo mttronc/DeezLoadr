@@ -391,7 +391,7 @@ function generateRandomHexString(stringLength) {
 * @returns {Boolean}
 */
 function fileSizeIsDefined(filesize) {
-    if ('undefined' === typeof filesize || 0 === parseInt(fileSize)) {
+    if ('undefined' === typeof filesize || 0 === parseInt(filesize)) {
         return false;
     }
 
