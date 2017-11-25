@@ -88,7 +88,7 @@ let isCli = Object.keys(options).length > 0;
      * The handler which will be executed before closing the application.
      */
     function exitHandler() {
-        fs.removeSync(DOWNLOAD_DIR + 'tempAlbumCovers');
+        fs.removeSync(DOWNLOAD_DIR + '/tempAlbumCovers');
         
         process.exit();
     }
@@ -593,7 +593,7 @@ function addId3Tags(trackInfos, filename) {
             fs.mkdirSync(DOWNLOAD_DIR + '/tempAlbumCovers');
         }
         
-        let albumCoverPath = DOWNLOAD_DIR + 'tempAlbumCovers/' + multipleWhitespacesToSingle(sanitize(trackInfos.SNG_TITLE)) + '.jpg';
+        let albumCoverPath = DOWNLOAD_DIR + '/tempAlbumCovers/' + multipleWhitespacesToSingle(sanitize(trackInfos.SNG_TITLE)) + '.jpg';
         let albumCoverFile = fs.createWriteStream(albumCoverPath);
         
         https.get(albumCoverUrl, function (albumCoverBuffer) {
