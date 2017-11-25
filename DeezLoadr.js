@@ -288,19 +288,10 @@ function downloadSingleTrack(id) {
             if ('' === albumName.trim()) {
                 albumName = 'Unknown album';
             }
-            
-            // todo: Improve download dir creation
-            if (!fs.existsSync(DOWNLOAD_DIR)) {
-                fs.mkdirSync(DOWNLOAD_DIR);
-            }
-            
-            if (!fs.existsSync(DOWNLOAD_DIR + '/' + artistName)) {
-                fs.mkdirSync(DOWNLOAD_DIR + '/' + artistName);
-            }
-            
-            if (!fs.existsSync(DOWNLOAD_DIR + '/' + artistName + '/' + albumName)) {
-                fs.mkdirSync(DOWNLOAD_DIR + '/' + artistName + '/' + albumName);
-            }
+
+            let dirPath = DOWNLOAD_DIR + '/' + artistName + '/' + albumName;
+
+            fs.ensureDirSync(dirPath);
             
             let fileExtension = 'mp3';
             
@@ -308,7 +299,7 @@ function downloadSingleTrack(id) {
                 fileExtension = 'flac';
             }
             
-            fileName = DOWNLOAD_DIR + '/' + artistName + '/' + albumName + '/' + multipleWhitespacesToSingle(sanitize(toTwoDigits(trackInfos.TRACK_NUMBER) + ' ' + trackInfos.SNG_TITLE)) + '.' + fileExtension;
+            fileName = dirPath + '/' + multipleWhitespacesToSingle(sanitize(toTwoDigits(trackInfos.TRACK_NUMBER) + ' ' + trackInfos.SNG_TITLE)) + '.' + fileExtension;
             const fileStream = fs.createWriteStream(fileName);
             
             return streamTrack(trackInfos, url, fileStream);
@@ -528,9 +519,7 @@ function addId3Tags(trackInfos, filename) {
     const albumCoverUrl = 'https://e-cdns-images.dzcdn.net/images/cover/' + trackInfos.ALB_PICTURE + '/500x500.jpg';
     
     try {
-        if (!fs.existsSync(DOWNLOAD_DIR + '/tempAlbumCovers')) {
-            fs.mkdirSync(DOWNLOAD_DIR + '/tempAlbumCovers');
-        }
+        fs.ensureDirSync(DOWNLOAD_DIR + '/tempAlbumCovers');
         
         let albumCoverPath = DOWNLOAD_DIR + 'tempAlbumCovers/' + multipleWhitespacesToSingle(sanitize(trackInfos.SNG_TITLE)) + '.jpg';
         let albumCoverFile = fs.createWriteStream(albumCoverPath);
