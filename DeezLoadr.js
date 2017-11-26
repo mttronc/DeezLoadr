@@ -255,9 +255,9 @@ function downloadMultiple(type, id) {
  * Download a track + id3tags (album cover...) and save it in the downloads folder.
  *
  * @param {Number} id
- * @param {String} albumArtistName
+ * @param {String|undefined} albumArtistName
  */
-function downloadSingleTrack(id, albumArtistName) {
+function downloadSingleTrack(id, albumArtistName = undefined) {
     let fileName;
     
     return request(format('http://www.deezer.com/track/%d', id)).then((htmlString) => {
@@ -357,7 +357,6 @@ function multipleWhitespacesToSingle(string) {
  * @returns {String}
  */
 function getTrackUrl(trackInfos, trackQuality) {
-    
     const step1 = [trackInfos.MD5_ORIGIN, trackQuality, trackInfos.SNG_ID, trackInfos.MEDIA_VERSION].join('¤');
     
     let step2 = crypto.createHash('md5').update(step1, 'ascii').digest('hex') + '¤' + step1 + '¤';
@@ -374,7 +373,7 @@ function getTrackUrl(trackInfos, trackQuality) {
  *
  * @param {Number} stringLength
  *
- * @returns {string}
+ * @returns {String}
  */
 function generateRandomHexString(stringLength) {
     let randomString = '';
@@ -497,8 +496,6 @@ function getBlowfishKey(trackInfos) {
  * @param {Object} stream
  */
 function streamTrack(trackInfos, url, stream) {
-    console.log(stream);
-    
     return new Promise((resolve) => {
         http.get(url, function (response) {
             let i = 0;
