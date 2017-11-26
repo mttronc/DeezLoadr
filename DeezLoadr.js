@@ -227,6 +227,7 @@ function getDeezerUrlId(deezerUrl) {
  */
 function downloadMultiple(type, id) {
     let url;
+    
     downloadTaskRunning = true;
     
     if ('album' === type) {
@@ -237,11 +238,8 @@ function downloadMultiple(type, id) {
     
     request(format(url + '%d?limit=-1', id)).then((data) => {
         const jsonData = JSON.parse(data);
+        
         Promise.map(jsonData.tracks.data, (track) => {
-            if ('album' === type) {
-                return downloadSingleTrack(track.id, jsonData.artist.name);
-            }
-            
             return downloadSingleTrack(track.id);
         }, {
             concurrency: 1
@@ -255,9 +253,8 @@ function downloadMultiple(type, id) {
  * Download a track + id3tags (album cover...) and save it in the downloads folder.
  *
  * @param {Number} id
- * @param {String|undefined} albumArtistName
  */
-function downloadSingleTrack(id, albumArtistName = undefined) {
+function downloadSingleTrack(id) {
     let fileName;
     
     return request(format('http://www.deezer.com/track/%d', id)).then((htmlString) => {
@@ -265,58 +262,60 @@ function downloadSingleTrack(id, albumArtistName = undefined) {
         const trackInfos = JSON.parse(PLAYER_INIT[1]).data[0];
         const trackQuality = getValidTrackQuality(trackInfos);
         
-        if (trackInfos.VERSION) {
-            trackInfos.SNG_TITLE += ' ' + trackInfos.VERSION;
-        }
-        
-        downloadSpinner.text = 'Downloading "' + trackInfos.ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"';
-        downloadSpinner.start();
-        
-        if (trackQuality !== selectedMusicQuality) {
-            let selectedMusicQualityName = musicQualities[Object.keys(musicQualities).find(key => musicQualities[key] === selectedMusicQuality)].name;
-            let trackQualityName = musicQualities[Object.keys(musicQualities).find(key => musicQualities[key] === trackQuality)].name;
+        return request('http://api.deezer.com/album/' + trackInfos.ALB_ID).then((albumData) => {
+            const albumJsonData = JSON.parse(albumData);
             
-            console.log(chalk.red('              This track isn\'t available in "' + selectedMusicQualityName + '". Using "' + trackQualityName + '".'));
-        }
-        
-        if (trackQuality) {
-            const url = getTrackUrl(trackInfos, trackQuality.id);
+            trackInfos.ALB_ART_NAME = albumJsonData.artist.name;
+            trackInfos.ALB_NUM_TRACKS = albumJsonData.nb_tracks;
+            trackInfos.GENRE = albumJsonData.genres.data[0].name;
             
-            let artistName = multipleWhitespacesToSingle(sanitize(trackInfos.ART_NAME));
-            
-            // Override with album artist name if downloading an album
-            // Because an album may contain tracks from multiple artists
-            if ('undefined' !== typeof albumArtistName) {
-                artistName = albumArtistName;
+            if (trackInfos.VERSION) {
+                trackInfos.SNG_TITLE += ' ' + trackInfos.VERSION;
             }
             
-            if ('' === artistName.trim()) {
-                artistName = 'Unknown artist';
+            downloadSpinner.text = 'Downloading "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"';
+            downloadSpinner.start();
+            
+            if (trackQuality !== selectedMusicQuality) {
+                let selectedMusicQualityName = musicQualities[Object.keys(musicQualities).find(key => musicQualities[key] === selectedMusicQuality)].name;
+                let trackQualityName = musicQualities[Object.keys(musicQualities).find(key => musicQualities[key] === trackQuality)].name;
+                
+                console.log(chalk.red('              This track isn\'t available in "' + selectedMusicQualityName + '". Using "' + trackQualityName + '".'));
             }
             
-            let albumName = multipleWhitespacesToSingle(sanitize(trackInfos.ALB_TITLE));
-            
-            if ('' === albumName.trim()) {
-                albumName = 'Unknown album';
+            if (trackQuality) {
+                const url = getTrackUrl(trackInfos, trackQuality.id);
+                
+                let artistName = multipleWhitespacesToSingle(sanitize(trackInfos.ALB_ART_NAME));
+                
+                if ('' === artistName.trim()) {
+                    artistName = 'Unknown artist';
+                }
+                
+                let albumName = multipleWhitespacesToSingle(sanitize(trackInfos.ALB_TITLE));
+                
+                if ('' === albumName.trim()) {
+                    albumName = 'Unknown album';
+                }
+                
+                let dirPath = DOWNLOAD_DIR + '/' + artistName + '/' + albumName;
+                
+                fs.ensureDirSync(dirPath);
+                
+                let fileExtension = 'mp3';
+                
+                if (musicQualities.FLAC.id === trackQuality.id) {
+                    fileExtension = 'flac';
+                }
+                
+                fileName = dirPath + '/' + multipleWhitespacesToSingle(sanitize(toTwoDigits(trackInfos.TRACK_NUMBER) + ' ' + trackInfos.SNG_TITLE)) + '.' + fileExtension;
+                const fileStream = fs.createWriteStream(fileName);
+                
+                return streamTrack(trackInfos, url, fileStream);
+            } else {
+                throw 'Song not available for download.';
             }
-            
-            let dirPath = DOWNLOAD_DIR + '/' + artistName + '/' + albumName;
-            
-            fs.ensureDirSync(dirPath);
-            
-            let fileExtension = 'mp3';
-            
-            if (musicQualities.FLAC.id === trackQuality.id) {
-                fileExtension = 'flac';
-            }
-            
-            fileName = dirPath + '/' + multipleWhitespacesToSingle(sanitize(toTwoDigits(trackInfos.TRACK_NUMBER) + ' ' + trackInfos.SNG_TITLE)) + '.' + fileExtension;
-            const fileStream = fs.createWriteStream(fileName);
-            
-            return streamTrack(trackInfos, url, fileStream);
-        } else {
-            throw 'Song not available for download.';
-        }
+        });
     }).then((trackInfos) => {
         addId3Tags(trackInfos, fileName);
     }).catch((err) => {
@@ -547,16 +546,16 @@ function addId3Tags(trackInfos, filename) {
         
         https.get(albumCoverUrl, function (albumCoverBuffer) {
             let metadata = {
-                title:              trackInfos.SNG_TITLE,
-                artist:             trackInfos.ART_NAME,
-                album:              trackInfos.ALB_TITLE,
-                copyright:          trackInfos.COPYRIGHT,
-                performerInfo:      trackInfos.ART_NAME,
-                trackNumber:        trackInfos.TRACK_NUMBER,
-                partOfSet:          trackInfos.DISK_NUMBER,
-                ISRC:               trackInfos.ISRC,
-                encodingTechnology: 'DeezLoadr',
-                comment:            {
+                title:         trackInfos.SNG_TITLE,
+                album:         trackInfos.ALB_TITLE,
+                genre:         trackInfos.GENRE,
+                copyright:     trackInfos.COPYRIGHT,
+                performerInfo: trackInfos.ALB_ART_NAME,
+                trackNumber:   trackInfos.TRACK_NUMBER + '/' + trackInfos.ALB_NUM_TRACKS,
+                partOfSet:     trackInfos.DISK_NUMBER,
+                ISRC:          trackInfos.ISRC,
+                encodedBy:     'DeezLoadr',
+                comment:       {
                     text: 'Downloaded from Deezer with DeezLoadr. https://github.com/J05HI/DeezLoadr'
                 }
             };
@@ -596,16 +595,16 @@ function addId3Tags(trackInfos, filename) {
             
             setTimeout(function () {
                 if (!nodeID3.write(metadata, filename)) {
-                    downloadSpinner.warn('Failed writing ID3 tags to "' + trackInfos.ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
+                    downloadSpinner.warn('Failed writing ID3 tags to "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
                 } else {
-                    downloadSpinner.succeed('Downloaded "' + trackInfos.ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
+                    downloadSpinner.succeed('Downloaded "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
                 }
                 
                 askForNewDownload();
             }, 50);
         });
     } catch (ex) {
-        downloadSpinner.warn('Failed writing ID3 tags to "' + trackInfos.ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
+        downloadSpinner.warn('Failed writing ID3 tags to "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
         
         askForNewDownload();
     }
