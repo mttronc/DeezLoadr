@@ -370,7 +370,7 @@ function getTrackDownloadUrl(trackInfos, trackQuality) {
     const step3 = crypto.createCipheriv('aes-128-ecb', 'jo6aey6haid2Teih', '').update(step2, 'ascii', 'hex');
     const cdn = generateRandomHexString(1);
     
-    return 'https://e-cdn-proxy-' + cdn + '.deezer.com/mobile/1/' + step3;
+    return 'https://e-cdns-proxy-' + cdn + '.dzcdn.net/mobile/1/' + step3;
 }
 
 /**
