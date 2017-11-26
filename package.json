@@ -18,6 +18,7 @@
         "request": "^2.83.0",
         "request-promise": "^4.2.2",
         "sanitize-filename": "^1.6.1",
+        "taglib2": "^2.9.6",
         "util": "^0.10.3"
     }
 }

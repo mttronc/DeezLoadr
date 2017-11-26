@@ -11,7 +11,6 @@ const ora = require('ora');
 const sanitize = require('sanitize-filename');
 const Promise = require('bluebird');
 const request = require('request-promise');
-const nodeID3 = require('node-id3');
 const crypto = require('crypto');
 const inquirer = require('inquirer');
 const url = require('url');
@@ -19,6 +18,8 @@ const format = require('util').format;
 const fs = require('fs-extra');
 const http = require('http');
 const https = require('https');
+
+const taglib = require('taglib2');
 
 let DOWNLOAD_DIR = 'DOWNLOADS/';
 
@@ -378,7 +379,9 @@ function downloadSingleTrack(id, albumArtistName) {
             throw 'Song not available for download.';
         }
     }).then((trackInfos) => {
-        addId3Tags(trackInfos, fileName);
+        return addId3Tags(trackInfos, fileName);
+    }).then((success) => {
+
     }).catch((err) => {
         if (404 === err.statusCode) {
             console.error('Song not found - ', err.options.uri);
@@ -468,6 +471,7 @@ function fileSizeIsDefined(filesize) {
  * @returns {Number|Boolean}
  */
 function getValidTrackQuality(trackInfos) {
+    console.log(trackInfos);
     if (musicQualities.FLAC === selectedMusicQuality) {
         if (!fileSizeIsDefined(trackInfos.FILESIZE_FLAC)) {
             if (!fileSizeIsDefined(trackInfos.FILESIZE_MP3_320)) {
@@ -599,87 +603,75 @@ function streamTrack(trackInfos, url, stream) {
 function addId3Tags(trackInfos, filename) {
     // todo: OLD URL! (remove it if the new one is 100% working)
     // const albumCoverUrl = 'http://e-cdn-images.deezer.com/images/cover/' + trackInfos.ALB_PICTURE + '/500x500.jpg';
-    
-    const albumCoverUrl = 'https://e-cdns-images.dzcdn.net/images/cover/' + trackInfos.ALB_PICTURE + '/500x500.jpg';
-    
-    try {
-        fs.ensureDirSync(DOWNLOAD_DIR + '/tempAlbumCovers');
+
+    return new Promise(function (resolve) {
+        let albumCoverUrl = 'https://e-cdns-images.dzcdn.net/images/cover/' + trackInfos.ALB_PICTURE + '/500x500.jpg';
         
-        let albumCoverPath = DOWNLOAD_DIR + '/tempAlbumCovers/' + multipleWhitespacesToSingle(sanitize(trackInfos.SNG_TITLE)) + '.jpg';
-        let albumCoverFile = fs.createWriteStream(albumCoverPath);
-        
-        https.get(albumCoverUrl, function (albumCoverBuffer) {
-            let metadata = {
-                title:              trackInfos.SNG_TITLE,
-                artist:             trackInfos.ART_NAME,
-                album:              trackInfos.ALB_TITLE,
-                copyright:          trackInfos.COPYRIGHT,
-                performerInfo:      trackInfos.ART_NAME,
-                trackNumber:        trackInfos.TRACK_NUMBER,
-                partOfSet:          trackInfos.DISK_NUMBER,
-                ISRC:               trackInfos.ISRC,
-                encodingTechnology: 'DeezLoadr',
-                comment:            {
-                    text: 'Downloaded from Deezer with DeezLoadr. https://github.com/J05HI/DeezLoadr'
+        try {
+            fs.ensureDirSync(DOWNLOAD_DIR + '/tempAlbumCovers');
+            
+            let albumCoverPath = DOWNLOAD_DIR + '/tempAlbumCovers/' + multipleWhitespacesToSingle(sanitize(trackInfos.SNG_TITLE)) + '.jpg';
+            let albumCoverFile = fs.createWriteStream(albumCoverPath);
+            
+            https.get(albumCoverUrl, function (albumCoverBuffer) {
+                let metadata = {
+                    title:              trackInfos.SNG_TITLE,
+                    artist:             trackInfos.ART_NAME,
+                    album:              trackInfos.ALB_TITLE,
+                    copyright:          trackInfos.COPYRIGHT,
+                    performerInfo:      trackInfos.ART_NAME,
+                    track:              trackInfos.TRACK_NUMBER,
+                    partOfSet:          trackInfos.DISK_NUMBER,
+                    ISRC:               trackInfos.ISRC,
+                    encodingTechnology: 'DeezLoadr',
+                    comment:            'Downloaded from Deezer with DeezLoadr. https://github.com/J05HI/DeezLoadr'
+                };
+
+                if (trackInfos.PHYSICAL_RELEASE_DATE) {
+                    metadata.year = trackInfos.PHYSICAL_RELEASE_DATE.slice(0, 4);
                 }
-            };
-            
-            if (trackInfos.PHYSICAL_RELEASE_DATE) {
-                metadata.year = trackInfos.PHYSICAL_RELEASE_DATE.slice(0, 4);
-            }
-            
-            metadata.artist = '';
-            let first = true;
-            trackInfos.ARTISTS.forEach(function (trackArtist) {
-                if (first) {
-                    metadata.artist = trackArtist.ART_NAME;
-                    first = false;
-                } else {
-                    metadata.artist += ', ' + trackArtist.ART_NAME;
+
+                metadata.artist = '';
+                let first = true;
+                trackInfos.ARTISTS.forEach(function (trackArtist) {
+                    if (first) {
+                        metadata.artist = trackArtist.ART_NAME;
+                        first = false;
+                    } else {
+                        metadata.artist += ', ' + trackArtist.ART_NAME;
+                    }
+                });
+
+                if (trackInfos.SNG_CONTRIBUTORS) {
+                    if (trackInfos.SNG_CONTRIBUTORS.composer) {
+                        metadata.composer = trackInfos.SNG_CONTRIBUTORS.composer.join(', ');
+                    }
+                    if (trackInfos.SNG_CONTRIBUTORS.musicpublisher) {
+                        metadata.publisher = trackInfos.SNG_CONTRIBUTORS.musicpublisher.join(', ');
+                    }
                 }
-            });
-            
-            if (trackInfos.SNG_CONTRIBUTORS) {
-                if (trackInfos.SNG_CONTRIBUTORS.composer) {
-                    metadata.composer = trackInfos.SNG_CONTRIBUTORS.composer.join(', ');
+
+                albumCoverBuffer.pipe(albumCoverFile);
+
+                if (!albumCoverBuffer) {
+                    metadata.image = undefined;
+                    return;
                 }
-                if (trackInfos.SNG_CONTRIBUTORS.musicpublisher) {
-                    metadata.publisher = trackInfos.SNG_CONTRIBUTORS.musicpublisher.join(', ');
-                }
-            }
-            
-            albumCoverBuffer.pipe(albumCoverFile);
-            
-            if (!albumCoverBuffer) {
-                metadata.image = undefined;
-                return;
-            }
-            
-            metadata.image = (albumCoverPath).replace(/\\/g, '/');
-            
-            setTimeout(function () {
-                if (!nodeID3.write(metadata, filename)) {
+
+                metadata.image = (albumCoverPath).replace(/\\/g, '/');
+
+                if (!taglib.writeTagsSync(filename, metadata)) {
                     downloadSpinner.warn('Failed writing ID3 tags to "' + trackInfos.ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
+                    resolve(false);
                 } else {
                     downloadSpinner.succeed('Downloaded "' + trackInfos.ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
+                    resolve(true);
                 }
-                
-                if (isCli) {
-                    if (!downloadTaskRunning) {
-                        process.exit(0);
-                    }
-                } else {
-                    askForNewDownload();
-                }
-            }, 50);
-        });
-    } catch (ex) {
-        downloadSpinner.warn('Failed writing ID3 tags to "' + trackInfos.ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
-        
-        if (isCli) {
-            process.exit(1);
-        } else {
-            askForNewDownload();
+            });
+        } catch (ex) {
+            downloadSpinner.warn('Failed writing ID3 tags to "' + trackInfos.ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
+
+            resolve(false);
         }
-    }
+    });
 }
