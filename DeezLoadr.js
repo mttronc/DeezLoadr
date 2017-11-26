@@ -241,7 +241,7 @@ function downloadMultiple(type, id) {
             if ('album' === type) {
                 return downloadSingleTrack(track.id, jsonData.artist.name);
             }
-
+            
             return downloadSingleTrack(track.id);
         }, {
             concurrency: 1
@@ -255,6 +255,7 @@ function downloadMultiple(type, id) {
  * Download a track + id3tags (album cover...) and save it in the downloads folder.
  *
  * @param {Number} id
+ * @param {String} albumArtistName
  */
 function downloadSingleTrack(id, albumArtistName) {
     let fileName;
@@ -282,7 +283,7 @@ function downloadSingleTrack(id, albumArtistName) {
             const url = getTrackUrl(trackInfos, trackQuality.id);
             
             let artistName = multipleWhitespacesToSingle(sanitize(trackInfos.ART_NAME));
-
+            
             // Override with album artist name if downloading an album
             // Because an album may contain tracks from multiple artists
             if ('undefined' !== typeof albumArtistName) {
@@ -292,15 +293,15 @@ function downloadSingleTrack(id, albumArtistName) {
             if ('' === artistName.trim()) {
                 artistName = 'Unknown artist';
             }
-
+            
             let albumName = multipleWhitespacesToSingle(sanitize(trackInfos.ALB_TITLE));
             
             if ('' === albumName.trim()) {
                 albumName = 'Unknown album';
             }
-
+            
             let dirPath = DOWNLOAD_DIR + '/' + artistName + '/' + albumName;
-
+            
             fs.ensureDirSync(dirPath);
             
             let fileExtension = 'mp3';
@@ -350,7 +351,7 @@ function multipleWhitespacesToSingle(string) {
 /**
  * Calculate the URL to download the track.
  *
- * @param {Array} trackInfos
+ * @param {Object} trackInfos
  * @param {Number} trackQuality
  *
  * @returns {String}
@@ -387,24 +388,24 @@ function generateRandomHexString(stringLength) {
 }
 
 /**
-* Parse file size and check if it is defined & is non zero zero
-*
-* @returns {Boolean}
-*/
+ * Parse file size and check if it is defined & is non zero zero
+ *
+ * @returns {Boolean}
+ */
 function fileSizeIsDefined(filesize) {
     if ('undefined' === typeof filesize || 0 === parseInt(filesize)) {
         return false;
     }
-
+    
     return true;
 }
 
 /**
  * Get a downloadable track quality.
  *
- * @param {Array} trackInfos
+ * @param {Object} trackInfos
  *
- * @returns {Number|Boolean}
+ * @returns {Object|Boolean}
  */
 function getValidTrackQuality(trackInfos) {
     if (musicQualities.FLAC === selectedMusicQuality) {
@@ -473,7 +474,7 @@ function getValidTrackQuality(trackInfos) {
 /**
  * calculate the blowfish key to decrypt the track
  *
- * @param {Array} trackInfos
+ * @param {Object} trackInfos
  */
 function getBlowfishKey(trackInfos) {
     const SECRET = 'g4el58wc0zvf9na1';
@@ -491,11 +492,13 @@ function getBlowfishKey(trackInfos) {
 /**
  * Download the track, decrypt it and write it in a stream
  *
- * @param {Array} trackInfos
+ * @param {Object} trackInfos
  * @param {String} url
- * @param stream
+ * @param {Object} stream
  */
 function streamTrack(trackInfos, url, stream) {
+    console.log(stream);
+    
     return new Promise((resolve) => {
         http.get(url, function (response) {
             let i = 0;
@@ -508,6 +511,7 @@ function streamTrack(trackInfos, url, stream) {
                     if (100 * 2048 * i / response.headers['content-length'] >= percent + 1) {
                         percent++;
                     }
+                    
                     if (i % 3 > 0 || chunk.length < 2048) {
                         stream.write(chunk);
                     } else {
@@ -532,13 +536,10 @@ function streamTrack(trackInfos, url, stream) {
 /**
  * Add ID3Tag to the mp3 file.
  *
- * @param {Array} trackInfos
+ * @param {Object} trackInfos
  * @param {String} filename
  */
 function addId3Tags(trackInfos, filename) {
-    // todo: OLD URL! (remove it if the new one is 100% working)
-    // const albumCoverUrl = 'http://e-cdn-images.deezer.com/images/cover/' + trackInfos.ALB_PICTURE + '/500x500.jpg';
-    
     const albumCoverUrl = 'https://e-cdns-images.dzcdn.net/images/cover/' + trackInfos.ALB_PICTURE + '/500x500.jpg';
     
     try {
