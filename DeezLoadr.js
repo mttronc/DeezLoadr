@@ -259,6 +259,7 @@ function downloadMultiple(type, id) {
  */
 function downloadSingleTrack(id) {
     let fileName;
+    let fileExtension = 'mp3';
     
     return request('https://www.deezer.com/track/' + id).then((htmlString) => {
         const PLAYER_INIT = htmlString.match(/track: ({.+}),/);
@@ -305,8 +306,6 @@ function downloadSingleTrack(id) {
                 
                 fs.ensureDirSync(dirPath);
                 
-                let fileExtension = 'mp3';
-                
                 if (musicQualities.FLAC.id === trackQuality.id) {
                     fileExtension = 'flac';
                 }
@@ -320,7 +319,11 @@ function downloadSingleTrack(id) {
             }
         });
     }).then((trackInfos) => {
-        addId3Tags(trackInfos, fileName);
+        if ('mp3' === fileExtension) {
+            addId3Tags(trackInfos, fileName);
+        } else {
+            downloadSpinner.succeed('Downloaded "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
+        }
     }).catch((err) => {
         if (404 === err.statusCode) {
             console.error('Song not found - ', err.options.uri);
