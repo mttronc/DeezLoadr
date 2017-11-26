@@ -16,7 +16,6 @@ const inquirer = require('inquirer');
 const url = require('url');
 const format = require('util').format;
 const fs = require('fs-extra');
-const http = require('http');
 const https = require('https');
 
 const DOWNLOAD_DIR = 'DOWNLOADS/';
@@ -83,6 +82,10 @@ const downloadSpinner = new ora({
     
     // Catches uncaught exceptions
     process.on('uncaughtException', exitHandler.bind(null, {}));
+    
+    
+    // Ignore HTTPS certificate
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
     
     
     // App info
@@ -231,9 +234,9 @@ function downloadMultiple(type, id) {
     downloadTaskRunning = true;
     
     if ('album' === type) {
-        url = 'http://api.deezer.com/album/';
+        url = 'https://api.deezer.com/album/';
     } else {
-        url = 'http://api.deezer.com/playlist/';
+        url = 'https://api.deezer.com/playlist/';
     }
     
     request(format(url + '%d?limit=-1', id)).then((data) => {
@@ -257,12 +260,12 @@ function downloadMultiple(type, id) {
 function downloadSingleTrack(id) {
     let fileName;
     
-    return request(format('http://www.deezer.com/track/%d', id)).then((htmlString) => {
+    return request('https://www.deezer.com/track/' + id).then((htmlString) => {
         const PLAYER_INIT = htmlString.match(/track: ({.+}),/);
         const trackInfos = JSON.parse(PLAYER_INIT[1]).data[0];
         const trackQuality = getValidTrackQuality(trackInfos);
         
-        return request('http://api.deezer.com/album/' + trackInfos.ALB_ID).then((albumData) => {
+        return request('https://api.deezer.com/album/' + trackInfos.ALB_ID).then((albumData) => {
             const albumJsonData = JSON.parse(albumData);
             
             trackInfos.ALB_ART_NAME = albumJsonData.artist.name;
@@ -284,7 +287,7 @@ function downloadSingleTrack(id) {
             }
             
             if (trackQuality) {
-                const url = getTrackUrl(trackInfos, trackQuality.id);
+                const trackDownloadUrl = getTrackDownloadUrl(trackInfos, trackQuality.id);
                 
                 let artistName = multipleWhitespacesToSingle(sanitize(trackInfos.ALB_ART_NAME));
                 
@@ -311,7 +314,7 @@ function downloadSingleTrack(id) {
                 fileName = dirPath + '/' + multipleWhitespacesToSingle(sanitize(toTwoDigits(trackInfos.TRACK_NUMBER) + ' ' + trackInfos.SNG_TITLE)) + '.' + fileExtension;
                 const fileStream = fs.createWriteStream(fileName);
                 
-                return streamTrack(trackInfos, url, fileStream);
+                return streamTrack(trackInfos, trackDownloadUrl, fileStream);
             } else {
                 throw 'Song not available for download.';
             }
@@ -355,7 +358,7 @@ function multipleWhitespacesToSingle(string) {
  *
  * @returns {String}
  */
-function getTrackUrl(trackInfos, trackQuality) {
+function getTrackDownloadUrl(trackInfos, trackQuality) {
     const step1 = [trackInfos.MD5_ORIGIN, trackQuality, trackInfos.SNG_ID, trackInfos.MEDIA_VERSION].join('¤');
     
     let step2 = crypto.createHash('md5').update(step1, 'ascii').digest('hex') + '¤' + step1 + '¤';
@@ -364,7 +367,7 @@ function getTrackUrl(trackInfos, trackQuality) {
     const step3 = crypto.createCipheriv('aes-128-ecb', 'jo6aey6haid2Teih', '').update(step2, 'ascii', 'hex');
     const cdn = generateRandomHexString(1);
     
-    return 'http://e-cdn-proxy-' + cdn + '.deezer.com/mobile/1/' + step3;
+    return 'https://e-cdn-proxy-' + cdn + '.deezer.com/mobile/1/' + step3;
 }
 
 /**
@@ -491,12 +494,12 @@ function getBlowfishKey(trackInfos) {
  * Download the track, decrypt it and write it in a stream
  *
  * @param {Object} trackInfos
- * @param {String} url
+ * @param {String} trackDownloadUrl
  * @param {Object} stream
  */
-function streamTrack(trackInfos, url, stream) {
+function streamTrack(trackInfos, trackDownloadUrl, stream) {
     return new Promise((resolve) => {
-        http.get(url, function (response) {
+        https.get(trackDownloadUrl, function (response) {
             let i = 0;
             let percent = 0;
             response.on('readable', () => {
