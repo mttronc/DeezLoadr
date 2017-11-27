@@ -323,6 +323,10 @@ function downloadSingleTrack(id) {
             addId3Tags(trackInfos, fileName);
         } else {
             downloadSpinner.succeed('Downloaded "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
+            
+            setTimeout(function () {
+                askForNewDownload();
+            }, 50);
         }
     }).catch((err) => {
         if (404 === err.statusCode) {
