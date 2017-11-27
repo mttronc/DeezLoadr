@@ -269,9 +269,15 @@ function downloadSingleTrack(id) {
         return request('https://api.deezer.com/album/' + trackInfos.ALB_ID).then((albumData) => {
             const albumJsonData = JSON.parse(albumData);
             
+            console.log(albumJsonData);
+            
             trackInfos.ALB_ART_NAME = albumJsonData.artist.name;
             trackInfos.ALB_NUM_TRACKS = albumJsonData.nb_tracks;
-            trackInfos.GENRE = albumJsonData.genres.data[0].name;
+            trackInfos.GENRE = '';
+            
+            if (albumJsonData.genres.data[0]) {
+                trackInfos.GENRE = albumJsonData.genres.data[0].name;
+            }
             
             if (trackInfos.VERSION) {
                 trackInfos.SNG_TITLE += ' ' + trackInfos.VERSION;
