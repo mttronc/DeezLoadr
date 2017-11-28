@@ -53,6 +53,23 @@ const downloadSpinner = new ora({
     color:   'white'
 });
 
+let unofficialApiUrl = 'http://www.deezer.com/ajax/gw-light.php';
+
+let unofficialApiQueries = {
+    api_version: '1.0',
+    api_token:   'null',
+    input:       '3'
+};
+
+let httpHeaders = {
+    'User-Agent':       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.94 Safari/537.36',
+    'Content-Language': 'en-US',
+    'Cache-Control':    'max-age=0',
+    'Accept':           '*/*',
+    'Accept-Charset':   'utf-8,ISO-8859-1;q=0.7,*;q=0.3',
+    'Accept-Language':  'de-DE,de;q=0.8,en-US;q=0.6,en;q=0.4'
+};
+
 
 /**
  * Application init.
@@ -101,13 +118,55 @@ const downloadSpinner = new ora({
     console.log(chalk.cyan('║') + '  BTC:  18JFjbdSDNQF69LNCJh8mhfoqRBTJuobCi  ' + chalk.cyan('║'));
     console.log(chalk.cyan('╚════════════════════════════════════════════╝\n'));
     
-    selectMusicQuality();
+    
+    downloadSpinner.text = 'Initiating Deezer API...';
+    downloadSpinner.start();
+    
+    initDeezerApi().then(function () {
+        downloadSpinner.succeed('Connected to Deezer API');
+        
+        selectMusicQuality();
+    }).catch((err) => {
+        downloadSpinner.fail(err);
+    });
 })();
+
+/**
+ * Fetch and set the api token.
+ */
+function initDeezerApi() {
+    return new Promise((resolve, reject) => {
+        request.get({
+            url:     'http://www.deezer.com/',
+            headers: httpHeaders,
+            jar:     true
+        }).then((body) => {
+            let regex = new RegExp(/checkForm\s*=\s*["|'](.*)["|']/g);
+            let apiToken = regex.exec(body);
+            
+            if (Array.isArray(apiToken) && apiToken[1]) {
+                unofficialApiQueries.api_token = apiToken[1];
+                
+                resolve();
+            } else {
+                throw 'Unable to initialize Deezer API.';
+            }
+        }).catch((err) => {
+            if (404 === err.statusCode) {
+                err = 'Could not connect to Deezer.';
+            }
+            
+            reject(err);
+        });
+    });
+}
 
 /**
  * Show user selection for the music download quality.
  */
 function selectMusicQuality() {
+    console.log('');
+    
     inquirer.prompt([
         {
             type:    'list',
@@ -261,67 +320,76 @@ function downloadSingleTrack(id) {
     let fileName;
     let fileExtension = 'mp3';
     
-    return request('https://www.deezer.com/track/' + id).then((htmlString) => {
-        const PLAYER_INIT = htmlString.match(/track: ({.+}),/);
-        const trackInfos = JSON.parse(PLAYER_INIT[1]).data[0];
-        const trackQuality = getValidTrackQuality(trackInfos);
-        
-        return request('https://api.deezer.com/album/' + trackInfos.ALB_ID).then((albumData) => {
-            const albumJsonData = JSON.parse(albumData);
+    request.post({
+        url:     unofficialApiUrl,
+        headers: httpHeaders,
+        qs:      unofficialApiQueries,
+        body:    '[{"method":"song.getListData","params":{"sng_ids":[' + id + ']}}]',
+        jar:     true
+    }).then((body) => {
+        if ('undefined' !== typeof JSON.parse(body)[0]) {
+            let trackInfos = JSON.parse(body)[0].results.data[0];
+            const trackQuality = getValidTrackQuality(trackInfos);
             
-            trackInfos.ALB_ART_NAME = albumJsonData.artist.name;
-            trackInfos.ALB_NUM_TRACKS = albumJsonData.nb_tracks;
-            trackInfos.GENRE = '';
-            
-            if (albumJsonData.genres.data[0]) {
-                trackInfos.GENRE = albumJsonData.genres.data[0].name;
-            }
-            
-            if (trackInfos.VERSION) {
-                trackInfos.SNG_TITLE += ' ' + trackInfos.VERSION;
-            }
-            
-            downloadSpinner.text = 'Downloading "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"';
-            downloadSpinner.start();
-            
-            if (trackQuality !== selectedMusicQuality) {
-                let selectedMusicQualityName = musicQualities[Object.keys(musicQualities).find(key => musicQualities[key] === selectedMusicQuality)].name;
-                let trackQualityName = musicQualities[Object.keys(musicQualities).find(key => musicQualities[key] === trackQuality)].name;
+            return request('https://api.deezer.com/album/' + trackInfos.ALB_ID).then((albumData) => {
+                const albumJsonData = JSON.parse(albumData);
                 
-                console.log(chalk.red('              This track isn\'t available in "' + selectedMusicQualityName + '". Using "' + trackQualityName + '".'));
-            }
-            
-            if (trackQuality) {
-                const trackDownloadUrl = getTrackDownloadUrl(trackInfos, trackQuality.id);
+                trackInfos.ALB_ART_NAME = albumJsonData.artist.name;
+                trackInfos.ALB_NUM_TRACKS = albumJsonData.nb_tracks;
+                trackInfos.GENRE = '';
                 
-                let artistName = multipleWhitespacesToSingle(sanitize(trackInfos.ALB_ART_NAME));
-                
-                if ('' === artistName.trim()) {
-                    artistName = 'Unknown artist';
+                if (albumJsonData.genres.data[0]) {
+                    trackInfos.GENRE = albumJsonData.genres.data[0].name;
                 }
                 
-                let albumName = multipleWhitespacesToSingle(sanitize(trackInfos.ALB_TITLE));
-                
-                if ('' === albumName.trim()) {
-                    albumName = 'Unknown album';
+                if (trackInfos.VERSION) {
+                    trackInfos.SNG_TITLE += ' ' + trackInfos.VERSION;
                 }
                 
-                let dirPath = DOWNLOAD_DIR + '/' + artistName + '/' + albumName;
+                downloadSpinner.text = 'Downloading "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"';
+                downloadSpinner.start();
                 
-                fs.ensureDirSync(dirPath);
-                
-                if (musicQualities.FLAC.id === trackQuality.id) {
-                    fileExtension = 'flac';
+                if (trackQuality) {
+                    if (trackQuality !== selectedMusicQuality) {
+                        let selectedMusicQualityName = musicQualities[Object.keys(musicQualities).find(key => musicQualities[key] === selectedMusicQuality)].name;
+                        let trackQualityName = musicQualities[Object.keys(musicQualities).find(key => musicQualities[key] === trackQuality)].name;
+                        
+                        downloadSpinner.warn('"' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '" not available in "' + selectedMusicQualityName + '". Using "' + trackQualityName + '".');
+                    }
+                    
+                    const trackDownloadUrl = getTrackDownloadUrl(trackInfos, trackQuality.id);
+                    
+                    let artistName = multipleWhitespacesToSingle(sanitize(trackInfos.ALB_ART_NAME));
+                    
+                    if ('' === artistName.trim()) {
+                        artistName = 'Unknown artist';
+                    }
+                    
+                    let albumName = multipleWhitespacesToSingle(sanitize(trackInfos.ALB_TITLE));
+                    
+                    if ('' === albumName.trim()) {
+                        albumName = 'Unknown album';
+                    }
+                    
+                    let dirPath = DOWNLOAD_DIR + '/' + artistName + '/' + albumName;
+                    
+                    fs.ensureDirSync(dirPath);
+                    
+                    if (musicQualities.FLAC.id === trackQuality.id) {
+                        fileExtension = 'flac';
+                    }
+                    
+                    fileName = dirPath + '/' + multipleWhitespacesToSingle(sanitize(toTwoDigits(trackInfos.TRACK_NUMBER) + ' ' + trackInfos.SNG_TITLE)) + '.' + fileExtension;
+                    const fileStream = fs.createWriteStream(fileName);
+                    
+                    return streamTrack(trackInfos, trackDownloadUrl, fileStream);
+                } else {
+                    throw 'Song "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '" not available for download.';
                 }
-                
-                fileName = dirPath + '/' + multipleWhitespacesToSingle(sanitize(toTwoDigits(trackInfos.TRACK_NUMBER) + ' ' + trackInfos.SNG_TITLE)) + '.' + fileExtension;
-                const fileStream = fs.createWriteStream(fileName);
-                
-                return streamTrack(trackInfos, trackDownloadUrl, fileStream);
-            } else {
-                throw 'Song not available for download.';
-            }
-        });
+            });
+        } else {
+            throw 'Song "' + id + '" not found.';
+        }
     }).then((trackInfos) => {
         if ('mp3' === fileExtension) {
             addId3Tags(trackInfos, fileName);
@@ -334,10 +402,10 @@ function downloadSingleTrack(id) {
         }
     }).catch((err) => {
         if (404 === err.statusCode) {
-            console.error('Song not found - ', err.options.uri);
-        } else {
-            throw err;
+            err = 'Song "' + id + '" not found.';
         }
+        
+        downloadSpinner.fail(err);
     });
 }
 
