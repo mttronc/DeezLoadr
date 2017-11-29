@@ -320,7 +320,7 @@ function downloadSingleTrack(id) {
     let fileName;
     let fileExtension = 'mp3';
     
-    request.post({
+    return request.post({
         url:     unofficialApiUrl,
         headers: httpHeaders,
         qs:      unofficialApiQueries,
