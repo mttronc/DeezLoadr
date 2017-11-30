@@ -367,11 +367,16 @@ function downloadSingleTrack(id) {
                 return request('https://api.deezer.com/album/' + trackInfos.ALB_ID).then((albumData) => {
                     const albumJsonData = JSON.parse(albumData);
                     
-                    trackInfos.ALB_ART_NAME = albumJsonData.artist.name;
+                    trackInfos.ALB_ART_NAME = trackInfos.ART_NAME;
+                    
+                    if (albumJsonData.artist && albumJsonData.artist.name) {
+                        trackInfos.ALB_ART_NAME = albumJsonData.artist.name;
+                    }
+                    
                     trackInfos.ALB_NUM_TRACKS = albumJsonData.nb_tracks;
                     trackInfos.GENRE = '';
                     
-                    if (albumJsonData.genres.data[0]) {
+                    if (albumJsonData.genres && albumJsonData.genres.data[0] && albumJsonData.genres.data[0].name) {
                         trackInfos.GENRE = albumJsonData.genres.data[0].name;
                     }
                     
