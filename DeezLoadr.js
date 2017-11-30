@@ -17,6 +17,7 @@ const url = require('url');
 const format = require('util').format;
 const fs = require('fs-extra');
 const https = require('https');
+const nodePath = require('path');
 
 const DOWNLOAD_DIR = 'DOWNLOADS/';
 
@@ -83,6 +84,7 @@ let httpHeaders = {
      */
     function exitHandler() {
         fs.removeSync(DOWNLOAD_DIR + 'tempAlbumCovers');
+        removeEmptyDirsRecursively(DOWNLOAD_DIR);
         
         process.exit();
     }
@@ -130,6 +132,35 @@ let httpHeaders = {
         downloadSpinner.fail(err);
     });
 })();
+
+/**
+ * Removes all empty directories in the given directory.
+ *
+ * @param {String} directory
+ */
+function removeEmptyDirsRecursively(directory) {
+    let isDir = fs.statSync(directory).isDirectory();
+    
+    if (!isDir) {
+        return;
+    }
+    
+    let files = fs.readdirSync(directory);
+    
+    if (0 < files.length) {
+        files.forEach(function (file) {
+            let fullPath = nodePath.join(directory, file);
+            
+            removeEmptyDirsRecursively(fullPath);
+        });
+        
+        files = fs.readdirSync(directory);
+    }
+    
+    if (0 === files.length) {
+        fs.rmdirSync(directory);
+    }
+}
 
 /**
  * Fetch and set the api token.
@@ -317,95 +348,135 @@ function downloadMultiple(type, id) {
  * @param {Number} id
  */
 function downloadSingleTrack(id) {
-    let fileName;
+    let dirPath;
+    let saveFilePath;
     let fileExtension = 'mp3';
     
-    return request.post({
-        url:     unofficialApiUrl,
-        headers: httpHeaders,
-        qs:      unofficialApiQueries,
-        body:    '[{"method":"song.getListData","params":{"sng_ids":[' + id + ']}}]',
-        jar:     true
-    }).then((body) => {
-        if ('undefined' !== typeof JSON.parse(body)[0]) {
-            let trackInfos = JSON.parse(body)[0].results.data[0];
-            const trackQuality = getValidTrackQuality(trackInfos);
-            
-            return request('https://api.deezer.com/album/' + trackInfos.ALB_ID).then((albumData) => {
-                const albumJsonData = JSON.parse(albumData);
+    return new Promise((resolve) => {
+        return request.post({
+            url:     unofficialApiUrl,
+            headers: httpHeaders,
+            qs:      unofficialApiQueries,
+            body:    '[{"method":"song.getListData","params":{"sng_ids":[' + id + ']}}]',
+            jar:     true
+        }).then((body) => {
+            if ('undefined' !== typeof JSON.parse(body)[0]) {
+                let trackInfos = JSON.parse(body)[0].results.data[0];
+                const trackQuality = getValidTrackQuality(trackInfos);
                 
-                trackInfos.ALB_ART_NAME = albumJsonData.artist.name;
-                trackInfos.ALB_NUM_TRACKS = albumJsonData.nb_tracks;
-                trackInfos.GENRE = '';
-                
-                if (albumJsonData.genres.data[0]) {
-                    trackInfos.GENRE = albumJsonData.genres.data[0].name;
-                }
-                
-                if (trackInfos.VERSION) {
-                    trackInfos.SNG_TITLE += ' ' + trackInfos.VERSION;
-                }
-                
-                downloadSpinner.text = 'Downloading "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"';
-                downloadSpinner.start();
-                
-                if (trackQuality) {
-                    if (trackQuality !== selectedMusicQuality) {
-                        let selectedMusicQualityName = musicQualities[Object.keys(musicQualities).find(key => musicQualities[key] === selectedMusicQuality)].name;
-                        let trackQualityName = musicQualities[Object.keys(musicQualities).find(key => musicQualities[key] === trackQuality)].name;
+                return request('https://api.deezer.com/album/' + trackInfos.ALB_ID).then((albumData) => {
+                    const albumJsonData = JSON.parse(albumData);
+                    
+                    trackInfos.ALB_ART_NAME = albumJsonData.artist.name;
+                    trackInfos.ALB_NUM_TRACKS = albumJsonData.nb_tracks;
+                    trackInfos.GENRE = '';
+                    
+                    if (albumJsonData.genres.data[0]) {
+                        trackInfos.GENRE = albumJsonData.genres.data[0].name;
+                    }
+                    
+                    if (trackInfos.VERSION) {
+                        trackInfos.SNG_TITLE += ' ' + trackInfos.VERSION;
+                    }
+                    
+                    downloadSpinner.text = 'Downloading "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"';
+                    downloadSpinner.start();
+                    
+                    if (trackQuality) {
+                        if (trackQuality !== selectedMusicQuality) {
+                            let selectedMusicQualityName = musicQualities[Object.keys(musicQualities).find(key => musicQualities[key] === selectedMusicQuality)].name;
+                            let trackQualityName = musicQualities[Object.keys(musicQualities).find(key => musicQualities[key] === trackQuality)].name;
+                            
+                            downloadSpinner.warn('"' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '" not available in "' + selectedMusicQualityName + '". Using "' + trackQualityName + '".');
+                        }
                         
-                        downloadSpinner.warn('"' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '" not available in "' + selectedMusicQualityName + '". Using "' + trackQualityName + '".');
+                        const trackDownloadUrl = getTrackDownloadUrl(trackInfos, trackQuality.id);
+                        
+                        let artistName = multipleWhitespacesToSingle(sanitize(trackInfos.ALB_ART_NAME));
+                        
+                        if ('' === artistName.trim()) {
+                            artistName = 'Unknown artist';
+                        }
+                        
+                        let albumName = multipleWhitespacesToSingle(sanitize(trackInfos.ALB_TITLE));
+                        
+                        if ('' === albumName.trim()) {
+                            albumName = 'Unknown album';
+                        }
+                        
+                        dirPath = DOWNLOAD_DIR + '/' + artistName + '/' + albumName;
+                        
+                        fs.ensureDirSync(dirPath);
+                        
+                        if (musicQualities.FLAC.id === trackQuality.id) {
+                            fileExtension = 'flac';
+                        }
+                        
+                        saveFilePath = dirPath + '/' + multipleWhitespacesToSingle(sanitize(toTwoDigits(trackInfos.TRACK_NUMBER) + ' ' + trackInfos.SNG_TITLE)) + '.' + fileExtension;
+                        
+                        return downloadTrack(trackInfos, trackDownloadUrl, saveFilePath).then(function () {
+                            return trackInfos;
+                        }).catch(() => {
+                            let errorAppend = '';
+                            let error = new Error();
+                            
+                            if (trackInfos.FALLBACK && trackInfos.FALLBACK.SNG_ID) {
+                                downloadSingleTrack(trackInfos.FALLBACK.SNG_ID).then(() => {
+                                    resolve();
+                                });
+                                
+                                if (trackInfos.FALLBACK.VERSION) {
+                                    trackInfos.FALLBACK.SNG_TITLE += ' ' + trackInfos.FALLBACK.VERSION;
+                                }
+                                
+                                errorAppend = '\n  Using "' + trackInfos.FALLBACK.ART_NAME + ' - ' + trackInfos.FALLBACK.SNG_TITLE + '" as alternative.';
+                                error.name = 'notAvailableButAlternative';
+                            }
+                            
+                            error.message = 'Song "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '" not available for download.' + errorAppend;
+                            
+                            throw error;
+                        });
+                    } else {
+                        throw 'Song "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '" not available for download.';
                     }
-                    
-                    const trackDownloadUrl = getTrackDownloadUrl(trackInfos, trackQuality.id);
-                    
-                    let artistName = multipleWhitespacesToSingle(sanitize(trackInfos.ALB_ART_NAME));
-                    
-                    if ('' === artistName.trim()) {
-                        artistName = 'Unknown artist';
-                    }
-                    
-                    let albumName = multipleWhitespacesToSingle(sanitize(trackInfos.ALB_TITLE));
-                    
-                    if ('' === albumName.trim()) {
-                        albumName = 'Unknown album';
-                    }
-                    
-                    let dirPath = DOWNLOAD_DIR + '/' + artistName + '/' + albumName;
-                    
-                    fs.ensureDirSync(dirPath);
-                    
-                    if (musicQualities.FLAC.id === trackQuality.id) {
-                        fileExtension = 'flac';
-                    }
-                    
-                    fileName = dirPath + '/' + multipleWhitespacesToSingle(sanitize(toTwoDigits(trackInfos.TRACK_NUMBER) + ' ' + trackInfos.SNG_TITLE)) + '.' + fileExtension;
-                    const fileStream = fs.createWriteStream(fileName);
-                    
-                    return streamTrack(trackInfos, trackDownloadUrl, fileStream);
-                } else {
-                    throw 'Song "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '" not available for download.';
-                }
-            });
-        } else {
-            throw 'Song "' + id + '" not found.';
-        }
-    }).then((trackInfos) => {
-        if ('mp3' === fileExtension) {
-            addId3Tags(trackInfos, fileName);
-        } else {
-            downloadSpinner.succeed('Downloaded "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
+                });
+            } else {
+                throw 'Song "' + id + '" not found.';
+            }
+        }).then((trackInfos) => {
+            if ('mp3' === fileExtension) {
+                addId3Tags(trackInfos, saveFilePath);
+                
+                resolve();
+            } else {
+                downloadSpinner.succeed('Downloaded "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
+                
+                resolve();
+                
+                setTimeout(function () {
+                    askForNewDownload();
+                }, 50);
+            }
+        }).catch((err) => {
+            if (404 === err.statusCode) {
+                err = 'Song "' + id + '" not found.';
+            }
             
-            setTimeout(function () {
-                askForNewDownload();
-            }, 50);
-        }
-    }).catch((err) => {
-        if (404 === err.statusCode) {
-            err = 'Song "' + id + '" not found.';
-        }
-        
-        downloadSpinner.fail(err);
+            if (err.name && err.message) {
+                downloadSpinner.fail(err.message);
+            } else {
+                downloadSpinner.fail(err);
+            }
+            
+            if ('notAvailableButAlternative' !== err.name) {
+                resolve();
+                
+                setTimeout(function () {
+                    askForNewDownload();
+                }, 50);
+            }
+        });
     });
 }
 
@@ -570,43 +641,50 @@ function getBlowfishKey(trackInfos) {
 }
 
 /**
- * Download the track, decrypt it and write it in a stream
+ * Download the track, decrypt it and write it to a file.
  *
  * @param {Object} trackInfos
  * @param {String} trackDownloadUrl
- * @param {Object} stream
+ * @param {String} saveFilePath
  */
-function streamTrack(trackInfos, trackDownloadUrl, stream) {
-    return new Promise((resolve) => {
+function downloadTrack(trackInfos, trackDownloadUrl, saveFilePath) {
+    return new Promise((resolve, reject) => {
         https.get(trackDownloadUrl, function (response) {
-            let i = 0;
-            let percent = 0;
-            response.on('readable', () => {
-                const bfKey = getBlowfishKey(trackInfos);
+            if (200 === response.statusCode) {
+                const fileStream = fs.createWriteStream(saveFilePath);
+                let i = 0;
+                let percent = 0;
                 
-                let chunk;
-                while (chunk = response.read(2048)) {
-                    if (100 * 2048 * i / response.headers['content-length'] >= percent + 1) {
-                        percent++;
-                    }
+                response.on('readable', () => {
+                    const bfKey = getBlowfishKey(trackInfos);
                     
-                    if (i % 3 > 0 || chunk.length < 2048) {
-                        stream.write(chunk);
-                    } else {
-                        const bfDecrypt = crypto.createDecipheriv('bf-cbc', bfKey, '\x00\x01\x02\x03\x04\x05\x06\x07');
-                        bfDecrypt.setAutoPadding(false);
+                    let chunk;
+                    while (chunk = response.read(2048)) {
+                        if (100 * 2048 * i / response.headers['content-length'] >= percent + 1) {
+                            percent++;
+                        }
                         
-                        let chunkDec = bfDecrypt.update(chunk.toString('hex'), 'hex', 'hex');
-                        chunkDec += bfDecrypt.final('hex');
-                        stream.write(chunkDec, 'hex');
+                        if (i % 3 > 0 || chunk.length < 2048) {
+                            fileStream.write(chunk);
+                        } else {
+                            const bfDecrypt = crypto.createDecipheriv('bf-cbc', bfKey, '\x00\x01\x02\x03\x04\x05\x06\x07');
+                            bfDecrypt.setAutoPadding(false);
+                            
+                            let chunkDec = bfDecrypt.update(chunk.toString('hex'), 'hex', 'hex');
+                            chunkDec += bfDecrypt.final('hex');
+                            fileStream.write(chunkDec, 'hex');
+                        }
+                        i++;
                     }
-                    i++;
-                }
-            });
-            response.on('end', () => {
-                stream.end();
-                resolve(trackInfos);
-            });
+                });
+                
+                response.on('end', () => {
+                    fileStream.end();
+                    resolve();
+                });
+            } else {
+                reject();
+            }
         });
     });
 }
