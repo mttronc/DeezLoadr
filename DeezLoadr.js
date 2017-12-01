@@ -54,7 +54,7 @@ const downloadSpinner = new ora({
     color:   'white'
 });
 
-let unofficialApiUrl = 'http://www.deezer.com/ajax/gw-light.php';
+let unofficialApiUrl = 'https://www.deezer.com/ajax/gw-light.php';
 
 let unofficialApiQueries = {
     api_version: '1.0',
@@ -168,7 +168,7 @@ function removeEmptyDirsRecursively(directory) {
 function initDeezerApi() {
     return new Promise((resolve, reject) => {
         request.get({
-            url:     'http://www.deezer.com/',
+            url:     'https://www.deezer.com/',
             headers: httpHeaders,
             jar:     true
         }).then((body) => {
@@ -255,7 +255,7 @@ function askForNewDownload() {
                         }
                     }
                     
-                    return 'Deezer URL example: http://www.deezer.com/album|playlist|track/0123456789';
+                    return 'Deezer URL example: https://www.deezer.com/album|playlist|track/0123456789';
                 }
             }
         ];
