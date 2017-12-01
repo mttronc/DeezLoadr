@@ -419,29 +419,37 @@ function downloadSingleTrack(id) {
                         
                         saveFilePath = dirPath + '/' + multipleWhitespacesToSingle(sanitize(toTwoDigits(trackInfos.TRACK_NUMBER) + ' ' + trackInfos.SNG_TITLE)) + '.' + fileExtension;
                         
-                        return downloadTrack(trackInfos, trackDownloadUrl, saveFilePath).then(function () {
-                            return trackInfos;
-                        }).catch(() => {
-                            let errorAppend = '';
-                            let error = new Error();
-                            
-                            if (trackInfos.FALLBACK && trackInfos.FALLBACK.SNG_ID) {
-                                downloadSingleTrack(trackInfos.FALLBACK.SNG_ID).then(() => {
-                                    resolve();
-                                });
+                        if (!fs.existsSync(saveFilePath)) {
+                            return downloadTrack(trackInfos, trackDownloadUrl, saveFilePath).then(function () {
+                                return trackInfos;
+                            }).catch(() => {
+                                let errorAppend = '';
+                                let error = new Error();
                                 
-                                if (trackInfos.FALLBACK.VERSION) {
-                                    trackInfos.FALLBACK.SNG_TITLE += ' ' + trackInfos.FALLBACK.VERSION;
+                                if (trackInfos.FALLBACK && trackInfos.FALLBACK.SNG_ID) {
+                                    downloadSingleTrack(trackInfos.FALLBACK.SNG_ID).then(() => {
+                                        resolve();
+                                    });
+                                    
+                                    if (trackInfos.FALLBACK.VERSION) {
+                                        trackInfos.FALLBACK.SNG_TITLE += ' ' + trackInfos.FALLBACK.VERSION;
+                                    }
+                                    
+                                    errorAppend = '\n  Using "' + trackInfos.FALLBACK.ART_NAME + ' - ' + trackInfos.FALLBACK.SNG_TITLE + '" as alternative.';
+                                    error.name = 'notAvailableButAlternative';
                                 }
                                 
-                                errorAppend = '\n  Using "' + trackInfos.FALLBACK.ART_NAME + ' - ' + trackInfos.FALLBACK.SNG_TITLE + '" as alternative.';
-                                error.name = 'notAvailableButAlternative';
-                            }
-                            
-                            error.message = 'Song "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '" not available for download.' + errorAppend;
+                                error.message = 'Song "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '" not available for download.' + errorAppend;
+                                
+                                throw error;
+                            });
+                        } else {
+                            let error = new Error();
+                            error.name = 'songAlreadyExists';
+                            error.message = 'Song "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '" already exists.';
                             
                             throw error;
-                        });
+                        }
                     } else {
                         throw 'Song "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '" not available for download.';
                     }
@@ -469,7 +477,11 @@ function downloadSingleTrack(id) {
             }
             
             if (err.name && err.message) {
-                downloadSpinner.fail(err.message);
+                if ('songAlreadyExists' === err.name) {
+                    downloadSpinner.warn(err.message);
+                } else {
+                    downloadSpinner.fail(err.message);
+                }
             } else {
                 downloadSpinner.fail(err);
             }
