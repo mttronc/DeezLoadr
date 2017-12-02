@@ -12,6 +12,7 @@ const Promise = require('bluebird');
 const request = require('request-promise');
 const nodeID3 = require('node-id3');
 const crypto = require('crypto');
+const md5File = require('md5-file');
 const inquirer = require('inquirer');
 const url = require('url');
 const format = require('util').format;
@@ -422,26 +423,30 @@ function downloadSingleTrack(id) {
                         if (!fs.existsSync(saveFilePath)) {
                             return downloadTrack(trackInfos, trackDownloadUrl, saveFilePath).then(function () {
                                 return trackInfos;
-                            }).catch(() => {
-                                let errorAppend = '';
-                                let error = new Error();
-                                
-                                if (trackInfos.FALLBACK && trackInfos.FALLBACK.SNG_ID) {
-                                    downloadSingleTrack(trackInfos.FALLBACK.SNG_ID).then(() => {
-                                        resolve();
-                                    });
+                            }).catch((error) => {
+                                if ('wrongMd5' === error) {
+                                    throw 'Song "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '": MD5 doesn\'t match Deezer\'s MD5.';
+                                } else {
+                                    let errorAppend = '';
+                                    let error = new Error();
                                     
-                                    if (trackInfos.FALLBACK.VERSION) {
-                                        trackInfos.FALLBACK.SNG_TITLE += ' ' + trackInfos.FALLBACK.VERSION;
+                                    if (trackInfos.FALLBACK && trackInfos.FALLBACK.SNG_ID) {
+                                        downloadSingleTrack(trackInfos.FALLBACK.SNG_ID).then(() => {
+                                            resolve();
+                                        });
+                                        
+                                        if (trackInfos.FALLBACK.VERSION) {
+                                            trackInfos.FALLBACK.SNG_TITLE += ' ' + trackInfos.FALLBACK.VERSION;
+                                        }
+                                        
+                                        errorAppend = '\n  Using "' + trackInfos.FALLBACK.ART_NAME + ' - ' + trackInfos.FALLBACK.SNG_TITLE + '" as alternative.';
+                                        error.name = 'notAvailableButAlternative';
                                     }
                                     
-                                    errorAppend = '\n  Using "' + trackInfos.FALLBACK.ART_NAME + ' - ' + trackInfos.FALLBACK.SNG_TITLE + '" as alternative.';
-                                    error.name = 'notAvailableButAlternative';
+                                    error.message = 'Song "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '" not available for download.' + errorAppend;
+                                    
+                                    throw error;
                                 }
-                                
-                                error.message = 'Song "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '" not available for download.' + errorAppend;
-                                
-                                throw error;
                             });
                         } else {
                             let error = new Error();
@@ -697,7 +702,24 @@ function downloadTrack(trackInfos, trackDownloadUrl, saveFilePath) {
                 
                 response.on('end', () => {
                     fileStream.end();
-                    resolve();
+                    
+                    let saveFilePathExtension = nodePath.extname(saveFilePath);
+                    
+                    if ('.flac' === saveFilePathExtension) {
+                        md5File(saveFilePath, (error, trackMd5) => {
+                            if (error) {
+                                throw error;
+                            }
+                            
+                            if (trackInfos.MD5_ORIGIN !== trackMd5) {
+                                reject('wrongMd5');
+                            } else {
+                                resolve();
+                            }
+                        });
+                    } else {
+                        resolve();
+                    }
                 });
             } else {
                 reject();
