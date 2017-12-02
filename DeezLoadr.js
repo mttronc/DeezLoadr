@@ -710,9 +710,9 @@ function downloadTrack(trackInfos, trackDownloadUrl, saveFilePath) {
  * Add ID3Tag to the mp3 file.
  *
  * @param {Object} trackInfos
- * @param {String} filename
+ * @param {String} saveFilePath
  */
-function addId3Tags(trackInfos, filename) {
+function addId3Tags(trackInfos, saveFilePath) {
     const albumCoverUrl = 'https://e-cdns-images.dzcdn.net/images/cover/' + trackInfos.ALB_PICTURE + '/500x500.jpg';
     
     try {
@@ -722,7 +722,7 @@ function addId3Tags(trackInfos, filename) {
         let albumCoverFile = fs.createWriteStream(albumCoverPath);
         
         https.get(albumCoverUrl, function (albumCoverBuffer) {
-            let metadata = {
+            let trackMp3Metadata = {
                 title:         trackInfos.SNG_TITLE,
                 album:         trackInfos.ALB_TITLE,
                 genre:         trackInfos.GENRE,
@@ -738,40 +738,37 @@ function addId3Tags(trackInfos, filename) {
             };
             
             if (trackInfos.PHYSICAL_RELEASE_DATE) {
-                metadata.year = trackInfos.PHYSICAL_RELEASE_DATE.slice(0, 4);
+                trackMp3Metadata.year = trackInfos.PHYSICAL_RELEASE_DATE.slice(0, 4);
             }
             
-            metadata.artist = '';
+            trackMp3Metadata.artist = '';
             let first = true;
             trackInfos.ARTISTS.forEach(function (trackArtist) {
                 if (first) {
-                    metadata.artist = trackArtist.ART_NAME;
+                    trackMp3Metadata.artist = trackArtist.ART_NAME;
                     first = false;
                 } else {
-                    metadata.artist += ', ' + trackArtist.ART_NAME;
+                    trackMp3Metadata.artist += ', ' + trackArtist.ART_NAME;
                 }
             });
             
             if (trackInfos.SNG_CONTRIBUTORS) {
                 if (trackInfos.SNG_CONTRIBUTORS.composer) {
-                    metadata.composer = trackInfos.SNG_CONTRIBUTORS.composer.join(', ');
+                    trackMp3Metadata.composer = trackInfos.SNG_CONTRIBUTORS.composer.join(', ');
                 }
                 if (trackInfos.SNG_CONTRIBUTORS.musicpublisher) {
-                    metadata.publisher = trackInfos.SNG_CONTRIBUTORS.musicpublisher.join(', ');
+                    trackMp3Metadata.publisher = trackInfos.SNG_CONTRIBUTORS.musicpublisher.join(', ');
                 }
             }
             
             albumCoverBuffer.pipe(albumCoverFile);
             
-            if (!albumCoverBuffer) {
-                metadata.image = undefined;
-                return;
+            if (albumCoverBuffer) {
+                trackMp3Metadata.image = (albumCoverPath).replace(/\\/g, '/');
             }
             
-            metadata.image = (albumCoverPath).replace(/\\/g, '/');
-            
             setTimeout(function () {
-                if (!nodeID3.write(metadata, filename)) {
+                if (!nodeID3.write(trackMp3Metadata, saveFilePath)) {
                     downloadSpinner.warn('Failed writing ID3 tags to "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
                 } else {
                     downloadSpinner.succeed('Downloaded "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
