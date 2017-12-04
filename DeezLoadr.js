@@ -11,6 +11,7 @@ const sanitize = require('sanitize-filename');
 const Promise = require('bluebird');
 const request = require('request-promise');
 const nodeID3 = require('node-id3');
+const flacMetadata = require('flac-metadata');
 const crypto = require('crypto');
 const md5File = require('md5-file');
 const inquirer = require('inquirer');
@@ -463,8 +464,8 @@ function downloadSingleTrack(id) {
                 throw 'Song "' + id + '" not found.';
             }
         }).then((trackInfos) => {
-            if ('mp3' === fileExtension) {
-                addId3Tags(trackInfos, saveFilePath);
+            if ('mp3' === fileExtension || 'flac' === fileExtension) {
+                addTrackTags(trackInfos, saveFilePath);
                 
                 resolve();
             } else {
@@ -734,7 +735,7 @@ function downloadTrack(trackInfos, trackDownloadUrl, saveFilePath) {
  * @param {Object} trackInfos
  * @param {String} saveFilePath
  */
-function addId3Tags(trackInfos, saveFilePath) {
+function addTrackTags(trackInfos, saveFilePath) {
     const albumCoverUrl = 'https://e-cdns-images.dzcdn.net/images/cover/' + trackInfos.ALB_PICTURE + '/500x500.jpg';
     
     try {
@@ -748,7 +749,6 @@ function addId3Tags(trackInfos, saveFilePath) {
                 title:         trackInfos.SNG_TITLE,
                 album:         trackInfos.ALB_TITLE,
                 genre:         trackInfos.GENRE,
-                copyright:     trackInfos.COPYRIGHT,
                 performerInfo: trackInfos.ALB_ART_NAME,
                 trackNumber:   trackInfos.TRACK_NUMBER + '/' + trackInfos.ALB_NUM_TRACKS,
                 partOfSet:     trackInfos.DISK_NUMBER,
@@ -758,6 +758,12 @@ function addId3Tags(trackInfos, saveFilePath) {
                     text: 'Downloaded from Deezer with DeezLoadr. https://github.com/J05HI/DeezLoadr'
                 }
             };
+            
+            trackMp3Metadata.copyright = '';
+            
+            if (trackInfos.COPYRIGHT) {
+                trackMp3Metadata.copyright = trackInfos.COPYRIGHT;
+            }
             
             if (trackInfos.PHYSICAL_RELEASE_DATE) {
                 trackMp3Metadata.year = trackInfos.PHYSICAL_RELEASE_DATE.slice(0, 4);
@@ -790,13 +796,86 @@ function addId3Tags(trackInfos, saveFilePath) {
             }
             
             setTimeout(function () {
-                if (!nodeID3.write(trackMp3Metadata, saveFilePath)) {
-                    downloadSpinner.warn('Failed writing ID3 tags to "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
-                } else {
-                    downloadSpinner.succeed('Downloaded "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
-                }
+                let saveFilePathExtension = nodePath.extname(saveFilePath);
                 
-                askForNewDownload();
+                if ('.mp3' === saveFilePathExtension) {
+                    if (!nodeID3.write(trackMp3Metadata, saveFilePath)) {
+                        throw 'Tag write error.';
+                    } else {
+                        downloadSpinner.succeed('Downloaded "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
+                    }
+                    
+                    askForNewDownload();
+                } else if ('.flac' === saveFilePathExtension) {
+                    let reader = fs.createReadStream(saveFilePath);
+                    let writer = fs.createWriteStream(saveFilePath + '.temp');
+                    let processor = new flacMetadata.Processor();
+                    
+                    let vendor = 'DeezLoadr';
+                    let comments = [
+                        'TITLE=' + trackMp3Metadata.title,
+                        'ALBUM=' + trackMp3Metadata.album,
+                        'GENRE=' + trackMp3Metadata.genre,
+                        'COPYRIGHT=' + trackMp3Metadata.copyright,
+                        'PERFORMER=' + trackMp3Metadata.performerInfo,
+                        'ARTIST=' + trackMp3Metadata.artist,
+                        'TRACKNUMBER=' + trackMp3Metadata.trackNumber,
+                        'DISCNUMBER=' + trackMp3Metadata.partOfSet,
+                        'ISRC=' + trackMp3Metadata.ISRC,
+                        'DATE=' + trackMp3Metadata.year,
+                        'ENCODER=' + trackMp3Metadata.encodedBy,
+                        'COMMENT=' + trackMp3Metadata.comment.text,
+                        'CONTACT=' + 'https://github.com/J05HI/DeezLoadr'
+                    ];
+                    
+                    processor.on('preprocess', function (mdb) {
+                        if (mdb.type === flacMetadata.Processor.MDB_TYPE_VORBIS_COMMENT) {
+                            mdb.remove();
+                        }
+                        
+                        if (mdb.type === flacMetadata.Processor.MDB_TYPE_PICTURE) {
+                            mdb.remove();
+                        }
+                        
+                        if (mdb.removed || mdb.isLast) {
+                            let mdbVorbisComment = flacMetadata.data.MetaDataBlockVorbisComment.create(mdb.isLast, vendor, comments);
+                            this.push(mdbVorbisComment.publish());
+                            
+                            let mdbPicture = flacMetadata.data.MetaDataBlockPicture.create(mdb.isLast, '', '', '', '', '', '', '', fs.readFileSync(albumCoverPath));
+                            this.push(mdbPicture.publish());
+                        }
+                    });
+                    
+                    reader.pipe(processor).pipe(writer);
+                    
+                    let tagWriteError = false;
+                    
+                    reader.on('error', function () {
+                        tagWriteError = true;
+                    });
+                    
+                    reader.on('close', function () {
+                        if (!tagWriteError) {
+                            fs.unlinkSync(saveFilePath, function (err) {
+                                if (err) {
+                                    throw err;
+                                }
+                            });
+                            
+                            fs.rename(saveFilePath + '.temp', saveFilePath, function (err) {
+                                if (err) {
+                                    throw err;
+                                }
+                                
+                                downloadSpinner.succeed('Downloaded "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
+                                
+                                askForNewDownload();
+                            });
+                        } else {
+                            throw 'Tag write error.';
+                        }
+                    });
+                }
             }, 50);
         });
     } catch (ex) {
