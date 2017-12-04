@@ -736,7 +736,7 @@ function downloadTrack(trackInfos, trackDownloadUrl, saveFilePath) {
  * @param {String} saveFilePath
  */
 function addTrackTags(trackInfos, saveFilePath) {
-    const albumCoverUrl = 'https://e-cdns-images.dzcdn.net/images/cover/' + trackInfos.ALB_PICTURE + '/500x500.jpg';
+    const albumCoverUrl = 'https://e-cdns-images.dzcdn.net/images/cover/' + trackInfos.ALB_PICTURE + '/1000x1000.jpg';
     
     try {
         fs.ensureDirSync(DOWNLOAD_DIR + '/tempAlbumCovers');
