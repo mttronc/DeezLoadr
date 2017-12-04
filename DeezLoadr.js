@@ -334,7 +334,7 @@ function downloadMultiple(type, id) {
     request(format(url + '%d?limit=-1', id)).then((data) => {
         const jsonData = JSON.parse(data);
         
-        Promise.map(jsonData.tracks.data, (track) => {
+        Promise.mapSeries(jsonData.tracks.data, (track) => {
             return downloadSingleTrack(track.id);
         }, {
             concurrency: 1
