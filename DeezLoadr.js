@@ -807,12 +807,12 @@ function addTrackTags(trackInfos, saveFilePath) {
                     
                     askForNewDownload();
                 } else if ('.flac' === saveFilePathExtension) {
-                    let reader = fs.createReadStream(saveFilePath);
-                    let writer = fs.createWriteStream(saveFilePath + '.temp');
-                    let processor = new flacMetadata.Processor();
+                    let flacCommentReader = fs.createReadStream(saveFilePath);
+                    let flacCommenWriter = fs.createWriteStream(saveFilePath + '.temp1');
+                    let flacCommentProcessor = new flacMetadata.Processor();
                     
-                    let vendor = 'DeezLoadr';
-                    let comments = [
+                    let flacVendor = 'DeezLoadr';
+                    let flacComments = [
                         'TITLE=' + trackMp3Metadata.title,
                         'ALBUM=' + trackMp3Metadata.album,
                         'GENRE=' + trackMp3Metadata.genre,
@@ -828,33 +828,26 @@ function addTrackTags(trackInfos, saveFilePath) {
                         'CONTACT=' + 'https://github.com/J05HI/DeezLoadr'
                     ];
                     
-                    processor.on('preprocess', function (mdb) {
+                    flacCommentProcessor.on('preprocess', function (mdb) {
                         if (mdb.type === flacMetadata.Processor.MDB_TYPE_VORBIS_COMMENT) {
                             mdb.remove();
                         }
                         
-                        if (mdb.type === flacMetadata.Processor.MDB_TYPE_PICTURE) {
-                            mdb.remove();
-                        }
-                        
                         if (mdb.removed || mdb.isLast) {
-                            let mdbVorbisComment = flacMetadata.data.MetaDataBlockVorbisComment.create(mdb.isLast, vendor, comments);
+                            let mdbVorbisComment = flacMetadata.data.MetaDataBlockVorbisComment.create(mdb.isLast, flacVendor, flacComments);
                             this.push(mdbVorbisComment.publish());
-                            
-                            let mdbPicture = flacMetadata.data.MetaDataBlockPicture.create(mdb.isLast, '', '', '', '', '', '', '', fs.readFileSync(albumCoverPath));
-                            this.push(mdbPicture.publish());
                         }
                     });
                     
-                    reader.pipe(processor).pipe(writer);
+                    flacCommentReader.pipe(flacCommentProcessor).pipe(flacCommenWriter);
                     
                     let tagWriteError = false;
                     
-                    reader.on('error', function () {
+                    flacCommentReader.on('error', function () {
                         tagWriteError = true;
                     });
                     
-                    reader.on('close', function () {
+                    flacCommentReader.on('close', function () {
                         if (!tagWriteError) {
                             fs.unlinkSync(saveFilePath, function (err) {
                                 if (err) {
@@ -862,14 +855,41 @@ function addTrackTags(trackInfos, saveFilePath) {
                                 }
                             });
                             
-                            fs.rename(saveFilePath + '.temp', saveFilePath, function (err) {
-                                if (err) {
-                                    throw err;
+                            let flacPictureReader = fs.createReadStream(saveFilePath + '.temp1');
+                            let flacPictureWriter = fs.createWriteStream(saveFilePath);
+                            let flacPictureProcessor = new flacMetadata.Processor();
+                            
+                            flacPictureProcessor.on('preprocess', function (mdb) {
+                                if (mdb.type === flacMetadata.Processor.MDB_TYPE_PICTURE) {
+                                    mdb.remove();
                                 }
                                 
-                                downloadSpinner.succeed('Downloaded "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
-                                
-                                askForNewDownload();
+                                if (mdb.removed || mdb.isLast) {
+                                    let mdbPicture = flacMetadata.data.MetaDataBlockPicture.create(mdb.isLast, '', '', '', '', '', '', '', fs.readFileSync(albumCoverPath));
+                                    this.push(mdbPicture.publish());
+                                }
+                            });
+                            
+                            flacPictureReader.on('error', function () {
+                                tagWriteError = true;
+                            });
+                            
+                            flacPictureReader.pipe(flacPictureProcessor).pipe(flacPictureWriter);
+                            
+                            flacPictureReader.on('close', function () {
+                                if (!tagWriteError) {
+                                    fs.unlinkSync(saveFilePath + '.temp1', function (err) {
+                                        if (err) {
+                                            throw err;
+                                        }
+                                    });
+                                    
+                                    downloadSpinner.succeed('Downloaded "' + trackInfos.ALB_ART_NAME + ' - ' + trackInfos.SNG_TITLE + '"');
+                                    
+                                    askForNewDownload();
+                                } else {
+                                    throw 'Tag write error.';
+                                }
                             });
                         } else {
                             throw 'Tag write error.';
