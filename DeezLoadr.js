@@ -769,16 +769,20 @@ function addTrackTags(trackInfos, saveFilePath) {
                 trackMp3Metadata.year = trackInfos.PHYSICAL_RELEASE_DATE.slice(0, 4);
             }
             
-            trackMp3Metadata.artist = '';
-            let first = true;
+            let trackArtists = [];
+            
             trackInfos.ARTISTS.forEach(function (trackArtist) {
-                if (first) {
-                    trackMp3Metadata.artist = trackArtist.ART_NAME;
-                    first = false;
-                } else {
-                    trackMp3Metadata.artist += ', ' + trackArtist.ART_NAME;
+                if (trackArtist.ART_NAME) {
+                    trackArtist = trackArtist.ART_NAME.split(new RegExp(' and | & ', 'g'));
+                    trackArtist = trackArtist.map(Function.prototype.call, String.prototype.trim);
+                    
+                    trackArtists = trackArtists.concat(trackArtist);
                 }
             });
+            
+            trackArtists = [...new Set(trackArtists)];
+            trackMp3Metadata.artist = trackArtists.join(', ');
+            
             
             if (trackInfos.SNG_CONTRIBUTORS) {
                 if (trackInfos.SNG_CONTRIBUTORS.composer) {
