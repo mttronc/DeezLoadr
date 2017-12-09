@@ -48,6 +48,8 @@ node app.js
 
 # Build the app
 npm install -g pkg (If you haven't installed it already)
+npm update -g pkg
+
 Execute the BUILD.cmd file ;)
 ```
 
