@@ -16,6 +16,7 @@
         "bluebird": "^3.5.1",
         "chalk": "^2.3.0",
         "fs-extra": "^4.0.2",
+        "globby": "^7.1.1",
         "inquirer": "^4.0.0",
         "md5-file": "^3.2.3",
         "node-id3": "^0.1.0",
@@ -23,7 +24,6 @@
         "request": "^2.83.0",
         "request-promise": "^4.2.2",
         "sanitize-filename": "^1.6.1",
-        "util": "^0.10.3",
-        "globby": "latest"
+        "util": "^0.10.3"
     }
 }
