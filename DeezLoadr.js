@@ -766,8 +766,8 @@ function addTrackTags(trackInfos, saveFilePath) {
         let albumCoverPath = tempAlbumCoversPath + multipleWhitespacesToSingle(sanitize(trackInfos.SNG_TITLE)) + '.jpg';
         let albumCoverFile = fs.createWriteStream(albumCoverPath);
         
-        https.get(albumCoverUrl, function (albumCoverBuffer) {
-            if (albumCoverBuffer) {
+        https.get(albumCoverUrl, function (albumCoverRequest) {
+            if (albumCoverRequest) {
                 let trackMp3Metadata = {
                     title:         trackInfos.SNG_TITLE,
                     album:         trackInfos.ALB_TITLE,
@@ -817,9 +817,9 @@ function addTrackTags(trackInfos, saveFilePath) {
                     }
                 }
                 
-                albumCoverBuffer.pipe(albumCoverFile);
+                albumCoverRequest.pipe(albumCoverFile);
                 
-                albumCoverBuffer.on('end', () => {
+                albumCoverRequest.on('close', () => {
                     let saveFilePathExtension = nodePath.extname(saveFilePath);
                     
                     if ('.mp3' === saveFilePathExtension) {
@@ -918,6 +918,8 @@ function unpackBinaries() {
                     fs.writeFile(tempBinariesPath + binaryName, data, 'binary', function (err) {
                         if (err) {
                             console.log(err);
+                        } else {
+                            fs.chmodSync(tempBinariesPath + binaryName, '755');
                         }
                     });
                 }
