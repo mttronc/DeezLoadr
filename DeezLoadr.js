@@ -138,6 +138,11 @@ const httpHeaders = {
     initDeezerApi().then(function () {
         downloadSpinner.succeed('Connected to Deezer API');
         
+        // Renew the api key every 30 minutes
+        setInterval(function () {
+            initDeezerApi();
+        }, 30 * 60 * 1000);
+        
         selectMusicQuality();
     }).catch((err) => {
         downloadSpinner.fail(err);
