@@ -6,6 +6,12 @@
     "repository": "https://github.com/J05HI/DeezLoadr",
     "license": "GPL-3.0",
     "main": "DeezLoadr.js",
+    "bin": "DeezLoadr.js",
+    "pkg": {
+        "assets": [
+            "binaries/**/*"
+        ]
+    },
     "dependencies": {
         "bluebird": "^3.5.1",
         "chalk": "^2.3.0",
@@ -17,6 +23,7 @@
         "request": "^2.83.0",
         "request-promise": "^4.2.2",
         "sanitize-filename": "^1.6.1",
-        "util": "^0.10.3"
+        "util": "^0.10.3",
+        "globby": "latest"
     }
 }

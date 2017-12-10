@@ -21,6 +21,8 @@ const https = require('https');
 const nodePath = require('path');
 const os = require('os');
 const spawn = require('child_process').spawn;
+const globby = require('globby');
+
 
 const DOWNLOAD_DIR = 'DOWNLOADS/';
 
@@ -58,7 +60,10 @@ const downloadSpinner = new ora({
     color:   'white'
 });
 
-let unofficialApiUrl = 'https://www.deezer.com/ajax/gw-light.php';
+const unofficialApiUrl = 'https://www.deezer.com/ajax/gw-light.php';
+const tempPath = 'DeezLoadrTemp/';
+const tempBinariesPath = tempPath + 'binaries/';
+const tempAlbumCoversPath = tempPath + 'albumCovers/';
 
 let unofficialApiQueries = {
     api_version: '1.0',
@@ -66,7 +71,7 @@ let unofficialApiQueries = {
     input:       '3'
 };
 
-let httpHeaders = {
+const httpHeaders = {
     'User-Agent':       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.94 Safari/537.36',
     'Content-Language': 'en-US',
     'Cache-Control':    'max-age=0',
@@ -87,7 +92,7 @@ let httpHeaders = {
      * The handler which will be executed before closing the application.
      */
     function exitHandler() {
-        fs.removeSync(DOWNLOAD_DIR + 'tempAlbumCovers');
+        fs.removeSync(tempPath);
         removeEmptyDirsRecursively(DOWNLOAD_DIR);
         
         process.exit();
@@ -124,6 +129,8 @@ let httpHeaders = {
     console.log(chalk.cyan('║') + '  BTC:  18JFjbdSDNQF69LNCJh8mhfoqRBTJuobCi  ' + chalk.cyan('║'));
     console.log(chalk.cyan('╚════════════════════════════════════════════╝\n'));
     
+    
+    unpackBinaries();
     
     downloadSpinner.text = 'Initiating Deezer API...';
     downloadSpinner.start();
@@ -749,9 +756,9 @@ function addTrackTags(trackInfos, saveFilePath) {
     const albumCoverUrl = 'https://e-cdns-images.dzcdn.net/images/cover/' + trackInfos.ALB_PICTURE + '/1000x1000.jpg';
     
     try {
-        fs.ensureDirSync(DOWNLOAD_DIR + '/tempAlbumCovers');
+        fs.ensureDirSync(tempAlbumCoversPath);
         
-        let albumCoverPath = DOWNLOAD_DIR + 'tempAlbumCovers/' + multipleWhitespacesToSingle(sanitize(trackInfos.SNG_TITLE)) + '.jpg';
+        let albumCoverPath = tempAlbumCoversPath + multipleWhitespacesToSingle(sanitize(trackInfos.SNG_TITLE)) + '.jpg';
         let albumCoverFile = fs.createWriteStream(albumCoverPath);
         
         https.get(albumCoverUrl, function (albumCoverBuffer) {
@@ -818,9 +825,7 @@ function addTrackTags(trackInfos, saveFilePath) {
                         }
                         
                     } else if ('.flac' === saveFilePathExtension) {
-                        const binariesPath = getBinariesPath();
-                        
-                        let metaflacInstance = spawn(binariesPath + 'metaflac', [
+                        let metaflacInstance = spawn(tempBinariesPath + 'metaflac', [
                             '--remove-all-tags',
                             '--set-tag=TITLE=' + trackMp3Metadata.title,
                             '--set-tag=ALBUM=' + trackMp3Metadata.album,
@@ -843,7 +848,7 @@ function addTrackTags(trackInfos, saveFilePath) {
                             if (code !== 0) {
                                 throw 'Tag write error.';
                             } else {
-                                let flacInstance = spawn(binariesPath + 'flac', [
+                                let flacInstance = spawn(tempBinariesPath + 'flac', [
                                     '--best',
                                     '--force',
                                     saveFilePath
@@ -887,4 +892,30 @@ function getBinariesPath() {
         arch,
         '/'
     );
+}
+
+/**
+ * Unpack the binaries to "DeezLoadrTemp/binaries".
+ */
+function unpackBinaries() {
+    (async () => {
+        const binariesPaths = await globby([getBinariesPath() + '**/*']);
+        fs.ensureDirSync(tempBinariesPath);
+        
+        binariesPaths.forEach(function (binaryPath) {
+            fs.readFile(binaryPath, function read(err, data) {
+                if (err) {
+                    console.log(err);
+                } else {
+                    const binaryName = nodePath.basename(binaryPath);
+                    
+                    fs.writeFile(tempBinariesPath + binaryName, data, 'binary', function (err) {
+                        if (err) {
+                            console.log(err);
+                        }
+                    });
+                }
+            });
+        });
+    })();
 }
