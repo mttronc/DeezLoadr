@@ -14,10 +14,10 @@ Right now it is just a basic tool which I hope will be improved in the future, a
 
 ### Features
 
-- Download music from Deezer
+- Download music from Deezer without an account
 - Supports single tracks, albums & playlists
 - Music quality selection (MP3 - 128 kbps, MP3 - 320 kbps, FLAC - 1411 kbps)
-- Auto tagging MP3 files (with album cover)
+- Auto tagging MP3 & FLAC files (with album cover)
 - Saves music to "DOWNLOADS/[artist]/[album]/[track_number] [title].mp3/flac"
 - Open source released under the GPLv3 (feel free to send pull requests :sunglasses:)
 
