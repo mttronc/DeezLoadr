@@ -832,6 +832,7 @@ function addTrackTags(trackInfos, saveFilePath) {
                             '--set-tag=GENRE=' + trackMp3Metadata.genre,
                             '--set-tag=COPYRIGHT=' + trackMp3Metadata.copyright,
                             '--set-tag=PERFORMER=' + trackMp3Metadata.performerInfo,
+                            '--set-tag=ALBUMARTIST=' + trackMp3Metadata.performerInfo,
                             '--set-tag=ARTIST=' + trackMp3Metadata.artist,
                             '--set-tag=TRACKNUMBER=' + trackMp3Metadata.trackNumber,
                             '--set-tag=DISCNUMBER=' + trackMp3Metadata.partOfSet,
