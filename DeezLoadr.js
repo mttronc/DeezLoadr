@@ -345,20 +345,33 @@ function downloadMultiple(type, id) {
     
     if ('album' === type) {
         url = 'https://api.deezer.com/album/';
-    } else {
+    } else if ('playlist' === type) {
         url = 'https://api.deezer.com/playlist/';
     }
     
     request(format(url + '%d?limit=-1', id)).then((data) => {
         const jsonData = JSON.parse(data);
         
-        Promise.mapSeries(jsonData.tracks.data, (track) => {
-            return downloadSingleTrack(track.id);
-        }, {
-            concurrency: 1
-        }).then(function () {
-            downloadTaskRunning = false;
-        });
+        if (jsonData.error) {
+            if ('playlist' === type && 'An active access token must be used to query information about the current user' === jsonData.error.message) {
+                throw 'Private playlists are not supported!';
+            } else {
+                throw 'Could not fetch the given link!';
+            }
+        } else {
+            Promise.mapSeries(jsonData.tracks.data, (track) => {
+                return downloadSingleTrack(track.id);
+            }, {
+                concurrency: 1
+            }).then(function () {
+                downloadTaskRunning = false;
+            });
+        }
+    }).catch(function (err) {
+        downloadTaskRunning = false;
+        
+        downloadSpinner.fail(err);
+        askForNewDownload();
     });
 }
 
