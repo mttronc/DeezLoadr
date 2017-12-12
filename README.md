@@ -44,7 +44,7 @@ Right now it is just a basic tool which I hope will be improved in the future, a
 npm install
 
 # Run the app for active development
-node app.js
+node DeezLoadr.js
 
 # Build the app
 npm install -g pkg (If you haven't installed it already)
@@ -63,7 +63,7 @@ BTC: 18JFjbdSDNQF69LNCJh8mhfoqRBTJuobCi
 
 ### Disclaimer
 
-**The author don't call to commit crimes.**
+**The author doesn't call to commit crimes.**
 
 **The usage of this tool may be illegal in your country! Please inform yourself.**
 
