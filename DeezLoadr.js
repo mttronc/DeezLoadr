@@ -779,8 +779,8 @@ function addTrackTags(trackInfos, saveFilePath) {
         let albumCoverPath = tempAlbumCoversPath + multipleWhitespacesToSingle(sanitize(trackInfos.SNG_TITLE)) + '.jpg';
         let albumCoverFile = fs.createWriteStream(albumCoverPath);
         
-        https.get(albumCoverUrl, function (albumCoverRequest) {
-            if (albumCoverRequest) {
+        https.get(albumCoverUrl, function (albumCoverResponse) {
+            if (200 === albumCoverResponse.statusCode) {
                 let trackMp3Metadata = {
                     title:         trackInfos.SNG_TITLE,
                     album:         trackInfos.ALB_TITLE,
@@ -830,59 +830,61 @@ function addTrackTags(trackInfos, saveFilePath) {
                     }
                 }
                 
-                albumCoverRequest.pipe(albumCoverFile);
+                albumCoverResponse.pipe(albumCoverFile);
                 
-                albumCoverRequest.on('close', () => {
-                    let saveFilePathExtension = nodePath.extname(saveFilePath);
-                    
-                    if ('.mp3' === saveFilePathExtension) {
-                        if (!nodeID3.write(trackMp3Metadata, saveFilePath)) {
-                            throw 'Tag write error.';
-                        } else {
-                            askForNewDownload();
-                        }
+                albumCoverResponse.on('end', () => {
+                    setTimeout(function () {
+                        let saveFilePathExtension = nodePath.extname(saveFilePath);
                         
-                    } else if ('.flac' === saveFilePathExtension) {
-                        let metaflacInstance = spawn(tempBinariesPath + 'metaflac', [
-                            '--remove-all-tags',
-                            '--set-tag=TITLE=' + trackMp3Metadata.title,
-                            '--set-tag=ALBUM=' + trackMp3Metadata.album,
-                            '--set-tag=GENRE=' + trackMp3Metadata.genre,
-                            '--set-tag=COPYRIGHT=' + trackMp3Metadata.copyright,
-                            '--set-tag=PERFORMER=' + trackMp3Metadata.performerInfo,
-                            '--set-tag=ALBUMARTIST=' + trackMp3Metadata.performerInfo,
-                            '--set-tag=ARTIST=' + trackMp3Metadata.artist,
-                            '--set-tag=TRACKNUMBER=' + trackMp3Metadata.trackNumber,
-                            '--set-tag=DISCNUMBER=' + trackMp3Metadata.partOfSet,
-                            '--set-tag=ISRC=' + trackMp3Metadata.ISRC,
-                            '--set-tag=DATE=' + trackMp3Metadata.year,
-                            '--set-tag=ENCODER=' + trackMp3Metadata.encodedBy,
-                            '--set-tag=COMMENT=' + trackMp3Metadata.comment.text,
-                            '--set-tag=CONTACT=' + 'https://github.com/J05HI/DeezLoadr',
-                            '--import-picture-from=' + trackMp3Metadata.image,
-                            saveFilePath
-                        ]);
-                        
-                        metaflacInstance.on('exit', function (code) {
-                            if (code !== 0) {
+                        if ('.mp3' === saveFilePathExtension) {
+                            if (!nodeID3.write(trackMp3Metadata, saveFilePath)) {
                                 throw 'Tag write error.';
                             } else {
-                                let flacInstance = spawn(tempBinariesPath + 'flac', [
-                                    '--best',
-                                    '--force',
-                                    saveFilePath
-                                ]);
-                                
-                                flacInstance.on('exit', function (code) {
-                                    if (code !== 0) {
-                                        throw 'Re encode error.';
-                                    } else {
-                                        askForNewDownload();
-                                    }
-                                });
+                                askForNewDownload();
                             }
-                        });
-                    }
+                            
+                        } else if ('.flac' === saveFilePathExtension) {
+                            let metaflacInstance = spawn(tempBinariesPath + 'metaflac', [
+                                '--remove-all-tags',
+                                '--set-tag=TITLE=' + trackMp3Metadata.title,
+                                '--set-tag=ALBUM=' + trackMp3Metadata.album,
+                                '--set-tag=GENRE=' + trackMp3Metadata.genre,
+                                '--set-tag=COPYRIGHT=' + trackMp3Metadata.copyright,
+                                '--set-tag=PERFORMER=' + trackMp3Metadata.performerInfo,
+                                '--set-tag=ALBUMARTIST=' + trackMp3Metadata.performerInfo,
+                                '--set-tag=ARTIST=' + trackMp3Metadata.artist,
+                                '--set-tag=TRACKNUMBER=' + trackMp3Metadata.trackNumber,
+                                '--set-tag=DISCNUMBER=' + trackMp3Metadata.partOfSet,
+                                '--set-tag=ISRC=' + trackMp3Metadata.ISRC,
+                                '--set-tag=DATE=' + trackMp3Metadata.year,
+                                '--set-tag=ENCODER=' + trackMp3Metadata.encodedBy,
+                                '--set-tag=COMMENT=' + trackMp3Metadata.comment.text,
+                                '--set-tag=CONTACT=' + 'https://github.com/J05HI/DeezLoadr',
+                                '--import-picture-from=' + trackMp3Metadata.image,
+                                saveFilePath
+                            ]);
+                            
+                            metaflacInstance.on('exit', function (code) {
+                                if (code !== 0) {
+                                    throw 'Tag write error.';
+                                } else {
+                                    let flacInstance = spawn(tempBinariesPath + 'flac', [
+                                        '--best',
+                                        '--force',
+                                        saveFilePath
+                                    ]);
+                                    
+                                    flacInstance.on('exit', function (code) {
+                                        if (code !== 0) {
+                                            throw 'Re encode error.';
+                                        } else {
+                                            askForNewDownload();
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    }, 50);
                 });
             } else {
                 throw 'Could not download album cover.';
